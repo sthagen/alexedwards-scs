@@ -39,6 +39,14 @@ type SessionManager struct {
 	// encoded/decoded using encoding/gob.
 	Codec Codec
 
+	// ErrorFunc allows you to control behavior when an error is encountered by
+	// the LoadAndSave middleware. The default behavior is for a HTTP 500
+	// "Internal Server Error" message to be sent to the client and the error
+	// logged using Go's standard logger. If a custom ErrorFunc is set, then
+	// control will be passed to this instead. A typical use would be to provide
+	// a function which logs the error and returns a customized HTML error page.
+	ErrorFunc func(http.ResponseWriter, *http.Request, error)
+
 	// contextKey is the key used to set and retrieve the session data from a
 	// context.Context. It's automatically generated to ensure uniqueness.
 	contextKey contextKey
@@ -93,6 +101,7 @@ func New() *SessionManager {
 		Lifetime:    24 * time.Hour,
 		Store:       memstore.New(),
 		Codec:       gobCodec{},
+		ErrorFunc:   defaultErrorFunc,
 		contextKey:  generateContextKey(),
 		Cookie: SessionCookie{
 			Name:     "session",
@@ -126,8 +135,7 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 
 		ctx, err := s.Load(r.Context(), token)
 		if err != nil {
-			log.Output(2, err.Error())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			s.ErrorFunc(w, r, err)
 			return
 		}
 
@@ -139,13 +147,12 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 		case Modified:
 			token, expiry, err := s.Commit(ctx)
 			if err != nil {
-				log.Output(2, err.Error())
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				s.ErrorFunc(w, r, err)
 				return
 			}
-			s.writeSessionCookie(w, token, expiry)
+			s.WriteSessionCookie(w, token, expiry)
 		case Destroyed:
-			s.writeSessionCookie(w, "", time.Time{})
+			s.WriteSessionCookie(w, "", time.Time{})
 		}
 
 		if bw.code != 0 {
@@ -155,7 +162,12 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 	})
 }
 
-func (s *SessionManager) writeSessionCookie(w http.ResponseWriter, token string, expiry time.Time) {
+// WriteSessionCookie writes a cookie with the provided session token and
+// expiry time.
+//
+// Most applications will use the LoadAndSave() middleware and will not need to
+// use this method.
+func (s *SessionManager) WriteSessionCookie(w http.ResponseWriter, token string, expiry time.Time) {
 	cookie := &http.Cookie{
 		Name:     s.Cookie.Name,
 		Value:    token,
@@ -189,10 +201,16 @@ func addHeaderIfMissing(w http.ResponseWriter, key, value string) {
 	w.Header().Add(key, value)
 }
 
+func defaultErrorFunc(w http.ResponseWriter, r *http.Request, err error) {
+	log.Output(2, err.Error())
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+}
+
 type bufferedResponseWriter struct {
 	http.ResponseWriter
-	buf  bytes.Buffer
-	code int
+	buf         bytes.Buffer
+	code        int
+	wroteHeader bool
 }
 
 func (bw *bufferedResponseWriter) Write(b []byte) (int, error) {
@@ -200,10 +218,20 @@ func (bw *bufferedResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (bw *bufferedResponseWriter) WriteHeader(code int) {
-	bw.code = code
+	if !bw.wroteHeader {
+		bw.code = code
+		bw.wroteHeader = true
+	}
 }
 
 func (bw *bufferedResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	hj := bw.ResponseWriter.(http.Hijacker)
 	return hj.Hijack()
+}
+
+func (bw *bufferedResponseWriter) Push(target string, opts *http.PushOptions) error {
+	if pusher, ok := bw.ResponseWriter.(http.Pusher); ok {
+		return pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }
