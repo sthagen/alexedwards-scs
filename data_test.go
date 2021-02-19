@@ -3,24 +3,323 @@ package scs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/alexedwards/scs/v2/mockstore"
 )
 
 func TestSessionDataFromContext(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("the code did not panic")
 		}
 	}()
 
-	s := NewSession()
+	s := New()
 	s.getSessionDataFromContext(context.Background())
 }
 
+func TestSessionManager_Load(T *testing.T) {
+	T.Parallel()
+
+	T.Run("happy path", func(t *testing.T) {
+		s := New()
+		s.IdleTimeout = time.Hour * 24
+
+		ctx := context.Background()
+		expected := "example"
+		exampleDeadline := time.Now().Add(time.Hour)
+
+		encodedValue, err := s.Codec.Encode(exampleDeadline, map[string]interface{}{
+			"things": "stuff",
+		})
+		if err != nil {
+			t.Errorf("unexpected error encoding value: %v", err)
+		}
+
+		if err := s.Store.Commit(expected, encodedValue, exampleDeadline); err != nil {
+			t.Errorf("error committing to session store: %v", err)
+		}
+
+		newCtx, err := s.Load(ctx, expected)
+		if err != nil {
+			t.Errorf("error loading from session manager: %v", err)
+		}
+		if newCtx == nil {
+			t.Error("returned context is unexpectedly nil")
+		}
+
+		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		if !ok {
+			t.Error("sessionData not present in returned context")
+		}
+		if sd == nil {
+			t.Error("sessionData present in returned context unexpectedly nil")
+		}
+		actual := sd.token
+
+		if expected != actual {
+			t.Errorf("expected %s to equal %s", expected, actual)
+		}
+	})
+
+	T.Run("with preexisting session data", func(t *testing.T) {
+		s := New()
+
+		obligatorySessionData := &sessionData{}
+		ctx := context.WithValue(context.Background(), s.contextKey, obligatorySessionData)
+		expected := "example"
+
+		newCtx, err := s.Load(ctx, expected)
+		if err != nil {
+			t.Errorf("error loading from session manager: %v", err)
+		}
+		if newCtx == nil {
+			t.Error("returned context is unexpectedly nil")
+		}
+	})
+
+	T.Run("with empty token", func(t *testing.T) {
+		s := New()
+
+		ctx := context.Background()
+		expected := ""
+		exampleDeadline := time.Now().Add(time.Hour)
+
+		encodedValue, err := s.Codec.Encode(exampleDeadline, map[string]interface{}{
+			"things": "stuff",
+		})
+		if err != nil {
+			t.Errorf("unexpected error encoding value: %v", err)
+		}
+
+		if err := s.Store.Commit(expected, encodedValue, exampleDeadline); err != nil {
+			t.Errorf("error committing to session store: %v", err)
+		}
+
+		newCtx, err := s.Load(ctx, "")
+		if err != nil {
+			t.Errorf("error loading from session manager: %v", err)
+		}
+		if newCtx == nil {
+			t.Error("returned context is unexpectedly nil")
+		}
+
+		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		if !ok {
+			t.Error("sessionData not present in returned context")
+		}
+		if sd == nil {
+			t.Error("sessionData present in returned context unexpectedly nil")
+		}
+		actual := sd.token
+
+		if expected != actual {
+			t.Errorf("expected %s to equal %s", expected, actual)
+		}
+	})
+
+	T.Run("with error finding token in store", func(t *testing.T) {
+		s := New()
+		store := &mockstore.MockStore{}
+
+		ctx := context.Background()
+		expected := "example"
+
+		store.ExpectFind(expected, []byte{}, true, errors.New("arbitrary"))
+		s.Store = store
+
+		newCtx, err := s.Load(ctx, expected)
+		if err == nil {
+			t.Errorf("no error loading from session manager: %v", err)
+		}
+		if newCtx != nil {
+			t.Error("returned context is unexpectedly not nil")
+		}
+	})
+
+	T.Run("with unfound token in store", func(t *testing.T) {
+		s := New()
+
+		ctx := context.Background()
+		exampleToken := "example"
+		expected := ""
+
+		newCtx, err := s.Load(ctx, exampleToken)
+		if err != nil {
+			t.Errorf("error loading from session manager: %v", err)
+		}
+		if newCtx == nil {
+			t.Error("returned context is unexpectedly nil")
+		}
+
+		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		if !ok {
+			t.Error("sessionData not present in returned context")
+		}
+		if sd == nil {
+			t.Error("sessionData present in returned context unexpectedly nil")
+		}
+		actual := sd.token
+
+		if expected != actual {
+			t.Errorf("expected %s to equal %s", expected, actual)
+		}
+	})
+
+	T.Run("with error decoding found token", func(t *testing.T) {
+		s := New()
+
+		ctx := context.Background()
+		expected := "example"
+		exampleDeadline := time.Now().Add(time.Hour)
+
+		if err := s.Store.Commit(expected, []byte(""), exampleDeadline); err != nil {
+			t.Errorf("error committing to session store: %v", err)
+		}
+
+		newCtx, err := s.Load(ctx, expected)
+		if err == nil {
+			t.Errorf("no error loading from session manager: %v", err)
+		}
+		if newCtx != nil {
+			t.Error("returned context is unexpectedly nil")
+		}
+	})
+}
+
+func TestSessionManager_Commit(T *testing.T) {
+	T.Parallel()
+
+	T.Run("happy path", func(t *testing.T) {
+		s := New()
+		s.IdleTimeout = time.Hour * 24
+
+		expectedToken := "example"
+		expectedExpiry := time.Now().Add(time.Hour)
+
+		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+			deadline: expectedExpiry,
+			token:    expectedToken,
+			values: map[string]interface{}{
+				"blah": "blah",
+			},
+			mu: sync.Mutex{},
+		})
+
+		actualToken, actualExpiry, err := s.Commit(ctx)
+		if expectedToken != actualToken {
+			t.Errorf("expected token to equal %q, but received %q", expectedToken, actualToken)
+		}
+		if expectedExpiry != actualExpiry {
+			t.Errorf("expected expiry to equal %v, but received %v", expectedExpiry, actualExpiry)
+		}
+		if err != nil {
+			t.Errorf("unexpected error returned: %v", err)
+		}
+	})
+
+	T.Run("with empty token", func(t *testing.T) {
+		s := New()
+		s.IdleTimeout = time.Hour * 24
+
+		expectedToken := "XO6_D4NBpGP3D_BtekxTEO6o2ZvOzYnArauSQbgg"
+		expectedExpiry := time.Now().Add(time.Hour)
+
+		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+			deadline: expectedExpiry,
+			token:    expectedToken,
+			values: map[string]interface{}{
+				"blah": "blah",
+			},
+			mu: sync.Mutex{},
+		})
+
+		actualToken, actualExpiry, err := s.Commit(ctx)
+		if expectedToken != actualToken {
+			t.Errorf("expected token to equal %q, but received %q", expectedToken, actualToken)
+		}
+		if expectedExpiry != actualExpiry {
+			t.Errorf("expected expiry to equal %v, but received %v", expectedExpiry, actualExpiry)
+		}
+		if err != nil {
+			t.Errorf("unexpected error returned: %v", err)
+		}
+	})
+
+	T.Run("with expired deadline", func(t *testing.T) {
+		s := New()
+		s.IdleTimeout = time.Millisecond
+
+		expectedToken := "example"
+		expectedExpiry := time.Now().Add(time.Hour * -100)
+
+		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+			deadline: time.Now().Add(time.Hour * 24),
+			token:    expectedToken,
+			values: map[string]interface{}{
+				"blah": "blah",
+			},
+			mu: sync.Mutex{},
+		})
+
+		actualToken, actualExpiry, err := s.Commit(ctx)
+		if expectedToken != actualToken {
+			t.Errorf("expected token to equal %q, but received %q", expectedToken, actualToken)
+		}
+		if expectedExpiry == actualExpiry {
+			t.Errorf("expected expiry not to equal %v", actualExpiry)
+		}
+		if err != nil {
+			t.Errorf("unexpected error returned: %v", err)
+		}
+	})
+
+	T.Run("with error committing to store", func(t *testing.T) {
+		s := New()
+		s.IdleTimeout = time.Hour * 24
+
+		store := &mockstore.MockStore{}
+		expectedErr := errors.New("arbitrary")
+
+		sd := &sessionData{
+			deadline: time.Now().Add(time.Hour),
+			token:    "example",
+			values: map[string]interface{}{
+				"blah": "blah",
+			},
+			mu: sync.Mutex{},
+		}
+		expectedBytes, err := s.Codec.Encode(sd.deadline, sd.values)
+		if err != nil {
+			t.Errorf("unexpected encode error: %v", err)
+		}
+
+		ctx := context.WithValue(context.Background(), s.contextKey, sd)
+
+		store.ExpectCommit(sd.token, expectedBytes, sd.deadline, expectedErr)
+		s.Store = store
+
+		actualToken, _, err := s.Commit(ctx)
+		if actualToken != "" {
+			t.Error("expected empty token")
+		}
+		if err == nil {
+			t.Error("expected error not returned")
+		}
+	})
+}
+
 func TestPut(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -36,7 +335,9 @@ func TestPut(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -52,7 +353,9 @@ func TestGet(t *testing.T) {
 }
 
 func TestPop(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -77,7 +380,9 @@ func TestPop(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -94,13 +399,17 @@ func TestRemove(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	sd.values["baz"] = "boz"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
-	s.Clear(ctx)
+	if err := s.Clear(ctx); err != nil {
+		t.Errorf("unexpected error encountered clearing session: %v", err)
+	}
 
 	if sd.values["foo"] != nil {
 		t.Errorf("got %v: expected %v", sd.values["foo"], nil)
@@ -116,7 +425,9 @@ func TestClear(t *testing.T) {
 }
 
 func TestExists(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -131,7 +442,9 @@ func TestExists(t *testing.T) {
 }
 
 func TestKeys(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	sd.values["woo"] = "waa"
@@ -144,7 +457,9 @@ func TestKeys(t *testing.T) {
 }
 
 func TestGetString(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -161,7 +476,9 @@ func TestGetString(t *testing.T) {
 }
 
 func TestGetBool(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = true
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -178,7 +495,9 @@ func TestGetBool(t *testing.T) {
 }
 
 func TestGetInt(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = 123
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -195,7 +514,9 @@ func TestGetInt(t *testing.T) {
 }
 
 func TestGetFloat(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = 123.456
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -212,7 +533,9 @@ func TestGetFloat(t *testing.T) {
 }
 
 func TestGetBytes(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = []byte("bar")
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -229,9 +552,11 @@ func TestGetBytes(t *testing.T) {
 }
 
 func TestGetTime(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
-	s := NewSession()
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = now
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -248,7 +573,9 @@ func TestGetTime(t *testing.T) {
 }
 
 func TestPopString(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -274,7 +601,9 @@ func TestPopString(t *testing.T) {
 }
 
 func TestPopBool(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = true
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -300,7 +629,9 @@ func TestPopBool(t *testing.T) {
 }
 
 func TestPopInt(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = 123
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -326,7 +657,9 @@ func TestPopInt(t *testing.T) {
 }
 
 func TestPopFloat(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = 123.456
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -352,7 +685,9 @@ func TestPopFloat(t *testing.T) {
 }
 
 func TestPopBytes(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = []byte("bar")
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -377,8 +712,10 @@ func TestPopBytes(t *testing.T) {
 }
 
 func TestPopTime(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
-	s := NewSession()
+	s := New()
 	sd := newSessionData(time.Hour)
 	sd.values["foo"] = now
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -405,7 +742,9 @@ func TestPopTime(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	s := NewSession()
+	t.Parallel()
+
+	s := New()
 	sd := newSessionData(time.Hour)
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -420,7 +759,10 @@ func TestStatus(t *testing.T) {
 		t.Errorf("got %d: expected %d", status, Modified)
 	}
 
-	s.Destroy(ctx)
+	if err := s.Destroy(ctx); err != nil {
+		t.Errorf("unexpected error destroying session data: %v", err)
+	}
+
 	status = s.Status(ctx)
 	if status != Destroyed {
 		t.Errorf("got %d: expected %d", status, Destroyed)

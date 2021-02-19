@@ -70,10 +70,10 @@ func (s *SessionManager) Load(ctx context.Context, token string) (context.Contex
 		status: Unmodified,
 		token:  token,
 	}
-	sd.deadline, sd.values, err = s.Codec.Decode(b)
-	if err != nil {
+	if sd.deadline, sd.values, err = s.Codec.Decode(b); err != nil {
 		return nil, err
 	}
+
 	// Mark the session data as modified if an idle timeout is being used. This
 	// will force the session data to be re-committed to the session store with
 	// a new expiry time.
@@ -97,8 +97,7 @@ func (s *SessionManager) Commit(ctx context.Context) (string, time.Time, error) 
 
 	if sd.token == "" {
 		var err error
-		sd.token, err = generateToken()
-		if err != nil {
+		if sd.token, err = generateToken(); err != nil {
 			return "", time.Time{}, err
 		}
 	}
@@ -116,8 +115,7 @@ func (s *SessionManager) Commit(ctx context.Context) (string, time.Time, error) 
 		}
 	}
 
-	err = s.Store.Commit(sd.token, b, expiry)
-	if err != nil {
+	if err := s.Store.Commit(sd.token, b, expiry); err != nil {
 		return "", time.Time{}, err
 	}
 
@@ -464,6 +462,14 @@ func (s *SessionManager) PopTime(ctx context.Context, key string) time.Time {
 	return t
 }
 
+// RememberMe controls whether the session cookie is persistent (i.e  whether it
+// is retained after a user closes their browser). RememberMe only has an effect
+// if you have set SessionManager.Cookie.Persist = false (the default is true) and
+// you are using the standard LoadAndSave() middleware.
+func (s *SessionManager) RememberMe(ctx context.Context, val bool) {
+	s.Put(ctx, "__rememberMe", val)
+}
+
 func (s *SessionManager) addSessionDataToContext(ctx context.Context, sd *sessionData) context.Context {
 	return context.WithValue(ctx, s.contextKey, sd)
 }
@@ -487,9 +493,14 @@ func generateToken() (string, error) {
 
 type contextKey string
 
-var contextKeyID uint64
+var (
+	contextKeyID      uint64
+	contextKeyIDMutex = &sync.Mutex{}
+)
 
 func generateContextKey() contextKey {
+	contextKeyIDMutex.Lock()
+	defer contextKeyIDMutex.Unlock()
 	atomic.AddUint64(&contextKeyID, 1)
 	return contextKey(fmt.Sprintf("session.%d", contextKeyID))
 }

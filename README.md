@@ -10,7 +10,7 @@
 
 * Automatic loading and saving of session data via middleware.
 * Choice of server-side session stores including PostgreSQL, MySQL, Redis, BadgerDB and BoltDB. Custom session stores are also supported.
-* Supports multiple sessions per request, 'flash' messages, session token regeneration, and idle and absolute session timeouts.
+* Supports multiple sessions per request, 'flash' messages, session token regeneration, idle and absolute session timeouts, and 'remember me' functionality.
 * Easy to extend and customize. Communicate session tokens to/from clients in HTTP headers or request/response bodies.
 * Efficient design. Smaller, faster and uses less memory than [gorilla/sessions](https://github.com/gorilla/sessions).
 
@@ -151,7 +151,8 @@ The session stores currently included are shown in the table below. Please click
 | [boltstore](https://github.com/alexedwards/scs/tree/master/boltstore)       			| BoltDB based session store  		                                               |
 | [memstore](https://github.com/alexedwards/scs/tree/master/memstore)       			| In-memory session store (default)                                                |
 | [mysqlstore](https://github.com/alexedwards/scs/tree/master/mysqlstore)   			| MySQL based session store                                                        |
-| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)         | PostgreSQL based session store                                                   |
+| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)         | PostgreSQL based session store (using the [pq](https://github.com/lib/pq) driver)                                                 |
+| [pgxstore](https://github.com/alexedwards/scs/tree/master/pgxstore)         | PostgreSQL based session store (using the [pgx](https://github.com/jackc/pgx) driver)                                                 |
 | [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)       		| Redis based session store |
 | [sqlite3store](https://github.com/alexedwards/scs/tree/master/sqlite3store) | SQLite3 based session store |
 
@@ -210,4 +211,4 @@ It is possible for an application to support multiple sessions per request, with
 
 This package requires Go 1.12 or newer.
 
-It is not compatible with the [Echo](https://echo.labstack.com/) framework. Please consider using the [Echo session manager](https://echo.labstack.com/middleware/session) instead.
+You may have [some problems](https://github.com/alexedwards/scs/issues/57) using this package with the [Echo](https://echo.labstack.com/) framework. If you do, then please consider using the [Echo session manager](https://echo.labstack.com/middleware/session) instead.
