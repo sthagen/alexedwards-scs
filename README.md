@@ -150,6 +150,7 @@ The session stores currently included are shown in the table below. Please click
 | [badgerstore](https://github.com/alexedwards/scs/tree/master/badgerstore)       		| BadgerDB based session store  		                                               |
 | [boltstore](https://github.com/alexedwards/scs/tree/master/boltstore)       			| BoltDB based session store  		                                               |
 | [memstore](https://github.com/alexedwards/scs/tree/master/memstore)       			| In-memory session store (default)                                                |
+| [mongodbstore](https://github.com/alexedwards/scs/tree/master/mongodbstore)       	| MongoDB based session store                                               |
 | [mysqlstore](https://github.com/alexedwards/scs/tree/master/mysqlstore)   			| MySQL based session store                                                        |
 | [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)         | PostgreSQL based session store (using the [pq](https://github.com/lib/pq) driver)                                                 |
 | [pgxstore](https://github.com/alexedwards/scs/tree/master/pgxstore)         | PostgreSQL based session store (using the [pgx](https://github.com/jackc/pgx) driver)                                                 |
@@ -211,4 +212,4 @@ It is possible for an application to support multiple sessions per request, with
 
 This package requires Go 1.12 or newer.
 
-You may have [some problems](https://github.com/alexedwards/scs/issues/57) using this package with the [Echo](https://echo.labstack.com/) framework. If you do, then please consider using the [Echo session manager](https://echo.labstack.com/middleware/session) instead.
+You may have [some problems](https://github.com/alexedwards/scs/issues/57) using this package with the [Echo](https://echo.labstack.com/) framework. If you do, then please consider using the [Echo session manager](https://echo.labstack.com/middleware/session) or [echo-scs-session](https://github.com/spazzymoto/echo-scs-session) fork instead.
