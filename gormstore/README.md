@@ -1,20 +1,25 @@
-# sqlite3store
+# gormstore
 
-A [SQLite3](https://github.com/mattn/go-sqlite3) based session store for [SCS](https://github.com/alexedwards/scs).
+A [GORM](https://github.com/go-gorm/gorm) based session store for [SCS](https://github.com/alexedwards/scs).
 
 ## Setup
 
-You should have a working SQLite3 database file containing a `sessions` table with the definition:
+You should have a working database containing a `sessions` table with the definition (for PostgreSQL):
 
 ```sql
 CREATE TABLE sessions (
 	token TEXT PRIMARY KEY,
-	data BLOB NOT NULL,
-	expiry REAL NOT NULL
+	data BYTEA NOT NULL,
+	expiry TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX sessions_expiry_idx ON sessions(expiry);
+CREATE INDEX sessions_expiry_idx ON sessions (expiry);
 ```
+For other stores you can find the setup here: [MSSQL](https://github.com/alexedwards/scs/tree/master/mssqlstore), [MySQL](https://github.com/alexedwards/scs/tree/master/mysqlstore), [SQLite3](https://github.com/alexedwards/scs/tree/master/sqlite3store).
+
+If no table is present, a new one will be automatically created.
+
+The database user for your application must have `CREATE TABLE`, `SELECT`, `INSERT`, `UPDATE` and `DELETE` permissions on this table.
 
 ## Example
 
@@ -27,25 +32,30 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/alexedwards/scs/gormstore"
 	"github.com/alexedwards/scs/v2"
-	"github.com/alexedwards/scs/sqlite3store"
-
-	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 var sessionManager *scs.SessionManager
 
 func main() {
-	// Open a SQLite3 database.
-	db, err := sql.Open("sqlite3", "sqlite3_database.db")
+	// Establish connection to your store.
+    db, err := gorm.Open(postgres.Open("postgres://username:password@host/dbname", &gorm.Config{})) // PostgreSQL
+    //db, err := gorm.Open(sqlserver.Open("sqlserver://username:password@host?database=dbname", &gorm.Config{})) // MSSQL
+    //db, err := gorm.Open(mysql.Open(username:password@tcp(host)/dbname?parseTime=true", &gorm.Config{})) // MySQL
+	//db, err := gorm.Open(sqlite.Open("sqlite3_database.db"), &gorm.Config{})) // SQLite3
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Initialize a new session manager and configure it to use sqlite3store as the session store.
+	// Initialize a new session manager and configure it to use gormstore as the session store.
 	sessionManager = scs.New()
-	sessionManager.Store = sqlite3store.New(db)
+	if sessionManager.Store, err = gormstore.New(db); err != nil {
+        log.Fatal(err)
+    }
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/put", putHandler)
@@ -70,10 +80,10 @@ This package provides a background 'cleanup' goroutine to delete expired session
 
 ```go
 // Run a cleanup every 30 minutes.
-SQLite3Store.NewWithCleanupInterval(db, 30*time.Minute)
+gormstore.NewWithCleanupInterval(db, 30*time.Minute)
 
 // Disable the cleanup goroutine by setting the cleanup interval to zero.
-SQLite3Store.NewWithCleanupInterval(db, 0)
+gormstore.NewWithCleanupInterval(db, 0)
 ```
 
 ### Terminating the Cleanup Goroutine
@@ -84,13 +94,16 @@ However, there may be occasions when your use of a session store instance is tra
 
 ```go
 func TestExample(t *testing.T) {
-	db, err := sql.Open("sqlite3", "sqlite3_database.db")
+	db, err := gorm.Open("postgres", "postgres://user:pass@localhost/db")
 	if err != nil {
 	    t.Fatal(err)
 	}
 	defer db.Close()
 
-	store := SQLite3Store.New(db)
+    store, err := gormstore.New(db)
+    if err != nil {
+	    t.Fatal(err)
+    }
 	defer store.StopCleanup()
 
 	sessionManager = scs.New()

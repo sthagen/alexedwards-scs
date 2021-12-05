@@ -1,20 +1,22 @@
-# sqlite3store
+# mssqlstore
 
-A [SQLite3](https://github.com/mattn/go-sqlite3) based session store for [SCS](https://github.com/alexedwards/scs).
+A [MSSQL](https://github.com/denisenkom/go-mssqldb) based session store for [SCS](https://github.com/alexedwards/scs).
 
 ## Setup
 
-You should have a working SQLite3 database file containing a `sessions` table with the definition:
+You should have a working MSSQL database containing a `sessions` table with the definition:
 
 ```sql
 CREATE TABLE sessions (
-	token TEXT PRIMARY KEY,
-	data BLOB NOT NULL,
-	expiry REAL NOT NULL
+	token CHAR(43) PRIMARY KEY,
+	data VARBINARY(MAX) NOT NULL,
+	expiry DATETIME2(6) NOT NULL
 );
 
-CREATE INDEX sessions_expiry_idx ON sessions(expiry);
+CREATE INDEX sessions_expiry_idx ON sessions (expiry);
 ```
+
+The database user for your application must have `SELECT`, `INSERT`, `UPDATE` and `DELETE` permissions on this table.
 
 ## Example
 
@@ -28,24 +30,24 @@ import (
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/alexedwards/scs/sqlite3store"
+	"github.com/alexedwards/scs/mssqlstore"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/denisenkom/go-mssqldb"
 )
 
 var sessionManager *scs.SessionManager
 
 func main() {
-	// Open a SQLite3 database.
-	db, err := sql.Open("sqlite3", "sqlite3_database.db")
+	// Establish connection to MSSQL.
+	db, err := sql.Open("sqlserver", "sqlserver://username:password@host?database=dbname")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Initialize a new session manager and configure it to use sqlite3store as the session store.
+	// Initialize a new session manager and configure it to use mssqlstore as the session store.
 	sessionManager = scs.New()
-	sessionManager.Store = sqlite3store.New(db)
+	sessionManager.Store = mssqlstore.New(db)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/put", putHandler)
@@ -70,10 +72,10 @@ This package provides a background 'cleanup' goroutine to delete expired session
 
 ```go
 // Run a cleanup every 30 minutes.
-SQLite3Store.NewWithCleanupInterval(db, 30*time.Minute)
+mssqlstore.NewWithCleanupInterval(db, 30*time.Minute)
 
 // Disable the cleanup goroutine by setting the cleanup interval to zero.
-SQLite3Store.NewWithCleanupInterval(db, 0)
+mssqlstore.NewWithCleanupInterval(db, 0)
 ```
 
 ### Terminating the Cleanup Goroutine
@@ -84,13 +86,13 @@ However, there may be occasions when your use of a session store instance is tra
 
 ```go
 func TestExample(t *testing.T) {
-	db, err := sql.Open("sqlite3", "sqlite3_database.db")
+	db, err := sql.Open("sqlserver", "sqlserver://username:password@host?database=dbname")
 	if err != nil {
 	    t.Fatal(err)
 	}
 	defer db.Close()
 
-	store := SQLite3Store.New(db)
+	store := mssqlstore.New(db)
 	defer store.StopCleanup()
 
 	sessionManager = scs.New()

@@ -3,6 +3,7 @@ package scs
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -150,39 +151,20 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 			sr.MultipartForm.RemoveAll()
 		}
 
-		if s.Status(ctx) != Unmodified {
-			responseCookie := &http.Cookie{
-				Name:     s.Cookie.Name,
-				Path:     s.Cookie.Path,
-				Domain:   s.Cookie.Domain,
-				Secure:   s.Cookie.Secure,
-				HttpOnly: s.Cookie.HttpOnly,
-				SameSite: s.Cookie.SameSite,
+		switch s.Status(ctx) {
+		case Modified:
+			token, expiry, err := s.Commit(ctx)
+			if err != nil {
+				s.ErrorFunc(w, r, err)
+				return
 			}
 
-			switch s.Status(ctx) {
-			case Modified:
-				token, expiry, err := s.Commit(ctx)
-				if err != nil {
-					s.ErrorFunc(w, r, err)
-					return
-				}
-
-				responseCookie.Value = token
-
-				if s.Cookie.Persist || s.GetBool(ctx, "__rememberMe") {
-					responseCookie.Expires = time.Unix(expiry.Unix()+1, 0)        // Round up to the nearest second.
-					responseCookie.MaxAge = int(time.Until(expiry).Seconds() + 1) // Round up to the nearest second.
-				}
-			case Destroyed:
-				responseCookie.Expires = time.Unix(1, 0)
-				responseCookie.MaxAge = -1
-			}
-
-			w.Header().Add("Set-Cookie", responseCookie.String())
-			addHeaderIfMissing(w, "Cache-Control", `no-cache="Set-Cookie"`)
-			addHeaderIfMissing(w, "Vary", "Cookie")
+			s.WriteSessionCookie(ctx, w, token, expiry)
+		case Destroyed:
+			s.WriteSessionCookie(ctx, w, "", time.Time{})
 		}
+
+		w.Header().Add("Vary", "Cookie")
 
 		if bw.code != 0 {
 			w.WriteHeader(bw.code)
@@ -191,13 +173,37 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 	})
 }
 
-func addHeaderIfMissing(w http.ResponseWriter, key, value string) {
-	for _, h := range w.Header()[key] {
-		if h == value {
-			return
-		}
+// WriteSessionCookie writes a cookie to the HTTP response with the provided
+// token as the cookie value and expiry as the cookie expiry time. The expiry
+// time will be included in the cookie only if the session is set to persist
+// or has had RememberMe(true) called on it. If expiry is an empty time.Time
+// struct (so that it's IsZero() method returns true) the cookie will be
+// marked with a historical expiry time and negative max-age (so the browser
+// deletes it).
+//
+// Most applications will use the LoadAndSave() middleware and will not need to
+// use this method.
+func (s *SessionManager) WriteSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
+	cookie := &http.Cookie{
+		Name:     s.Cookie.Name,
+		Value:    token,
+		Path:     s.Cookie.Path,
+		Domain:   s.Cookie.Domain,
+		Secure:   s.Cookie.Secure,
+		HttpOnly: s.Cookie.HttpOnly,
+		SameSite: s.Cookie.SameSite,
 	}
-	w.Header().Add(key, value)
+
+	if expiry.IsZero() {
+		cookie.Expires = time.Unix(1, 0)
+		cookie.MaxAge = -1
+	} else if s.Cookie.Persist || s.GetBool(ctx, "__rememberMe") {
+		cookie.Expires = time.Unix(expiry.Unix()+1, 0)        // Round up to the nearest second.
+		cookie.MaxAge = int(time.Until(expiry).Seconds() + 1) // Round up to the nearest second.
+	}
+
+	w.Header().Add("Set-Cookie", cookie.String())
+	w.Header().Add("Cache-Control", `no-cache="Set-Cookie"`)
 }
 
 func defaultErrorFunc(w http.ResponseWriter, r *http.Request, err error) {
