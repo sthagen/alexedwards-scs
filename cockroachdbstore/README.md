@@ -1,10 +1,10 @@
-# postgresstore
+# cockroachdbstore
 
-A PostgreSQL based session store for [SCS](https://github.com/alexedwards/scs) using the [pq](https://github.com/lib/pq) driver.
+A CockroachDB based session store for [SCS](https://github.com/alexedwards/scs) using the [pq](https://github.com/lib/pq) driver.
 
 ## Setup
 
-You should have a working PostgreSQL database containing a `sessions` table with the definition:
+You should have a working CockroachDB database containing a `sessions` table with the definition:
 
 ```sql
 CREATE TABLE sessions (
@@ -30,7 +30,7 @@ import (
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/alexedwards/scs/postgresstore"
+	"github.com/alexedwards/scs/cockroachdbstore"
 
 	_ "github.com/lib/pq"
 )
@@ -38,16 +38,16 @@ import (
 var sessionManager *scs.SessionManager
 
 func main() {
-	// Establish connection to PostgreSQL.
+	// Establish connection to CockroachDB.
 	db, err := sql.Open("postgres", "postgres://username:password@host/dbname")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Initialize a new session manager and configure it to use postgresstore as the session store.
+	// Initialize a new session manager and configure it to use cockroachdbstore as the session store.
 	sessionManager = scs.New()
-	sessionManager.Store = postgresstore.New(db)
+	sessionManager.Store = cockroachdbstore.New(db)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/put", putHandler)
@@ -72,10 +72,10 @@ This package provides a background 'cleanup' goroutine to delete expired session
 
 ```go
 // Run a cleanup every 30 minutes.
-postgresstore.NewWithCleanupInterval(db, 30*time.Minute)
+cockroachdbstore.NewWithCleanupInterval(db, 30*time.Minute)
 
 // Disable the cleanup goroutine by setting the cleanup interval to zero.
-postgresstore.NewWithCleanupInterval(db, 0)
+cockroachdbstore.NewWithCleanupInterval(db, 0)
 ```
 
 ### Terminating the Cleanup Goroutine
@@ -92,7 +92,7 @@ func TestExample(t *testing.T) {
 	}
 	defer db.Close()
 
-	store := postgresstore.New(db)
+	store := cockroachdbstore.New(db)
 	defer store.StopCleanup()
 
 	sessionManager = scs.New()

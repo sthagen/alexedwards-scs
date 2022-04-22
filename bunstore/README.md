@@ -1,10 +1,10 @@
-# postgresstore
+# bunstore
 
-A PostgreSQL based session store for [SCS](https://github.com/alexedwards/scs) using the [pq](https://github.com/lib/pq) driver.
+A [Bun](https://github.com/uptrace/bun) based session store for [SCS](https://github.com/alexedwards/scs).
 
 ## Setup
 
-You should have a working PostgreSQL database containing a `sessions` table with the definition:
+You should have a working database containing a `sessions` table with the definition (for PostgreSQL):
 
 ```sql
 CREATE TABLE sessions (
@@ -15,8 +15,11 @@ CREATE TABLE sessions (
 
 CREATE INDEX sessions_expiry_idx ON sessions (expiry);
 ```
+For other stores you can find the setup here: [MySQL](https://github.com/alexedwards/scs/tree/master/mysqlstore), [SQLite3](https://github.com/alexedwards/scs/tree/master/sqlite3store).
 
-The database user for your application must have `SELECT`, `INSERT`, `UPDATE` and `DELETE` permissions on this table.
+If no table is present, a new one will be automatically created.
+
+The database user for your application must have `CREATE TABLE`, `SELECT`, `INSERT`, `UPDATE` and `DELETE` permissions on this table.
 
 ## Example
 
@@ -29,25 +32,38 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/alexedwards/scs/bunstore"
 	"github.com/alexedwards/scs/v2"
-	"github.com/alexedwards/scs/postgresstore"
-
-	_ "github.com/lib/pq"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	_ "github.com/uptrace/bun/driver/pgdriver"
 )
 
 var sessionManager *scs.SessionManager
 
 func main() {
-	// Establish connection to PostgreSQL.
-	db, err := sql.Open("postgres", "postgres://username:password@host/dbname")
+	// Establish connection to your store.
+	sqldb, err := sql.Open("pg", "postgres://username:password@host/dbname") // PostgreSQL
+	//sqldb, err := sql.Open("mysql", "username:password@tcp(host)/dbname?parseTime=true") // MySQL
+	//sqldb, err := sql.Open(sqliteshim.ShimName, "sqlite3_database.db") // SQLite3
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db := bun.NewDB(sqldb, pgdialect.New()) // PostgreSQL
+	//db := bun.NewDB(sqldb, mysqldialect.New()) // MySQL
+	//db := bun.NewDB(sqldb, sqlitedialect.New()) // SQLite3
 	defer db.Close()
 
-	// Initialize a new session manager and configure it to use postgresstore as the session store.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1000)
+	db.SetConnMaxLifetime(0)
+
+	// Initialize a new session manager and configure it to use bunstore as the session store.
 	sessionManager = scs.New()
-	sessionManager.Store = postgresstore.New(db)
+	if sessionManager.Store, err = bunstore.New(db); err != nil {
+        log.Fatal(err)
+    }
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/put", putHandler)
@@ -72,10 +88,10 @@ This package provides a background 'cleanup' goroutine to delete expired session
 
 ```go
 // Run a cleanup every 30 minutes.
-postgresstore.NewWithCleanupInterval(db, 30*time.Minute)
+bunstore.NewWithCleanupInterval(db, 30*time.Minute)
 
 // Disable the cleanup goroutine by setting the cleanup interval to zero.
-postgresstore.NewWithCleanupInterval(db, 0)
+bunstore.NewWithCleanupInterval(db, 0)
 ```
 
 ### Terminating the Cleanup Goroutine
@@ -86,13 +102,22 @@ However, there may be occasions when your use of a session store instance is tra
 
 ```go
 func TestExample(t *testing.T) {
-	db, err := sql.Open("postgres", "postgres://username:password@host/dbname")
+	sqldb, err := sql.Open("pg", "postgres://username:password@host/dbname")
 	if err != nil {
-	    t.Fatal(err)
+		log.Fatal(err)
 	}
+	
+	db := bun.NewDB(sqldb, pgdialect.New())
 	defer db.Close()
 
-	store := postgresstore.New(db)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1000)
+	db.SetConnMaxLifetime(0)
+
+    store, err := bunstore.New(db)
+    if err != nil {
+	    t.Fatal(err)
+    }
 	defer store.StopCleanup()
 
 	sessionManager = scs.New()

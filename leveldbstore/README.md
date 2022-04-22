@@ -1,22 +1,10 @@
-# postgresstore
+# leveldbstore
 
-A PostgreSQL based session store for [SCS](https://github.com/alexedwards/scs) using the [pq](https://github.com/lib/pq) driver.
+A [LevelDB](https://github.com/syndtr/goleveldb) based session store for [SCS](https://github.com/alexedwards/scs).
 
 ## Setup
 
-You should have a working PostgreSQL database containing a `sessions` table with the definition:
-
-```sql
-CREATE TABLE sessions (
-	token TEXT PRIMARY KEY,
-	data BYTEA NOT NULL,
-	expiry TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX sessions_expiry_idx ON sessions (expiry);
-```
-
-The database user for your application must have `SELECT`, `INSERT`, `UPDATE` and `DELETE` permissions on this table.
+You should follow the instructions to [install and open a database](https://github.com/syndtr/goleveldb#installation), and pass the database to `leveldbstore.New()` to establish the session store.
 
 ## Example
 
@@ -24,30 +12,27 @@ The database user for your application must have `SELECT`, `INSERT`, `UPDATE` an
 package main
 
 import (
-	"database/sql"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/alexedwards/scs/postgresstore"
-
-	_ "github.com/lib/pq"
+	"github.com/alexedwards/scs/leveldbstore"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 var sessionManager *scs.SessionManager
 
 func main() {
-	// Establish connection to PostgreSQL.
-	db, err := sql.Open("postgres", "postgres://username:password@host/dbname")
+	// Open a LevelDB database.
+	db, err := leveldb.OpenFile("tmp/leveldb.db", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
-	// Initialize a new session manager and configure it to use postgresstore as the session store.
+	
+	// Initialize a new session manager and configure it to use leveldbstore as the session store.
 	sessionManager = scs.New()
-	sessionManager.Store = postgresstore.New(db)
+	sessionManager.Store = leveldbstore.New(db)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/put", putHandler)
@@ -68,14 +53,14 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 ## Expired Session Cleanup
 
-This package provides a background 'cleanup' goroutine to delete expired session data. This stops the database table from holding on to invalid sessions indefinitely and growing unnecessarily large. By default the cleanup runs every 5 minutes. You can change this by using the `NewWithCleanupInterval()` function to initialize your session store. For example:
+This package provides a background 'cleanup' goroutine to delete expired session data. This stops the database table from holding on to invalid sessions indefinitely and growing unnecessarily large. By default the cleanup runs every 1 minute. You can change this by using the `NewWithCleanupInterval()` function to initialize your session store. For example:
 
 ```go
-// Run a cleanup every 30 minutes.
-postgresstore.NewWithCleanupInterval(db, 30*time.Minute)
+// Run a cleanup every 5 minutes.
+leveldbstore.NewWithCleanupInterval(db, 5*time.Minute)
 
 // Disable the cleanup goroutine by setting the cleanup interval to zero.
-postgresstore.NewWithCleanupInterval(db, 0)
+leveldbstore.NewWithCleanupInterval(db, 0)
 ```
 
 ### Terminating the Cleanup Goroutine
@@ -86,13 +71,13 @@ However, there may be occasions when your use of a session store instance is tra
 
 ```go
 func TestExample(t *testing.T) {
-	db, err := sql.Open("postgres", "postgres://username:password@host/dbname")
+	db, err := leveldb.OpenFile("tmp/leveldb.db", nil)
 	if err != nil {
-	    t.Fatal(err)
+		t.Fatal(err)
 	}
 	defer db.Close()
 
-	store := postgresstore.New(db)
+	store := leveldbstore.New(db)
 	defer store.StopCleanup()
 
 	sessionManager = scs.New()
