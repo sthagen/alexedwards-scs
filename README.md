@@ -171,6 +171,7 @@ The session stores currently included are shown in the table below. Please click
 | [goredisstore](https://github.com/alexedwards/scs/tree/master/goredisstore)         | [Redis](https://redis.io/) (using [go-redis](https://github.com/redis/go-redis))                 | N | Y | Y |
 | [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)             | [Redis](https://redis.io/) (using [redigo](https://github.com/gomodule/redigo))                  | N | Y | Y |
 | [sqlite3store](https://github.com/alexedwards/scs/tree/master/sqlite3store)         | [SQLite3](https://sqlite.org/) (using the [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) CGO-based driver) | Y | N | Y |
+| [rueidisstore](https://github.com/fnoopv/rueidisstore)         | [Redis](https://redis.io/) (using the [rueidis](https://github.com/redis/rueidis)) | N | N | Y |
 
 Custom session stores are also supported. Please [see here](#using-custom-session-stores) for more information.
 
