@@ -48,9 +48,10 @@ type SessionManager struct {
 	// HashTokenInStore controls whether or not to store the session token or a hashed version in the store.
 	HashTokenInStore bool
 
-	// contextKey is the key used to set and retrieve the session data from a
-	// context.Context. It's automatically generated to ensure uniqueness.
-	contextKey contextKey
+	// ContextKey is the key used to set and retrieve the session data from a
+	// context.Context. If you are setting this manually, please make sure it is
+	// a unique value for each SessionManager instance
+	ContextKey contextKey
 }
 
 // SessionCookie contains the configuration settings for session cookies.
@@ -110,7 +111,7 @@ func New() *SessionManager {
 		Store:       memstore.New(),
 		Codec:       GobCodec{},
 		ErrorFunc:   defaultErrorFunc,
-		contextKey:  generateContextKey(),
+		ContextKey:  generateContextKey(),
 		Cookie: SessionCookie{
 			Name:        "session",
 			Domain:      "",
