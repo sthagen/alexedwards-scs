@@ -154,13 +154,13 @@ The session stores currently included are shown in the table below. Please click
 | :---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------|----------|-----------|---------------| 
 | [badgerstore](https://github.com/alexedwards/scs/tree/master/badgerstore)           | [BadgerDB](https://dgraph.io/docs/badger/)                                      | Y | N | N |
 | [boltstore](https://github.com/alexedwards/scs/tree/master/boltstore)               | [BBolt](https://go.etcd.io/bbolt)                                               | Y | N | N |
-| [bunstore](https://github.com/alexedwards/scs/tree/master/bunstore)                 | [Bun](https://bun.uptrace.dev/) ORM for PostgreSQL/MySQL/MSSQL/SQLite           | N | N | Y | 
+| [bunstore](https://github.com/alexedwards/scs/tree/master/bunstore)                 | [Bun](https://bun.uptrace.dev/) (ORM for PostgreSQL/MySQL/MSSQL/SQLite)           | N | N | Y | 
 | [buntdbstore](https://github.com/alexedwards/scs/tree/master/buntdbstore)           | [BuntDB](https://github.com/tidwall/buntdb)                                     | Y | Y | N |
 | [cockroachdbstore](https://github.com/alexedwards/scs/tree/master/cockroachdbstore) | [CockroachDB](https://www.cockroachlabs.com/)                                   | N | N | Y |
 | [consulstore](https://github.com/alexedwards/scs/tree/master/consulstore)           | [Consul](https://www.consul.io/)                                                | N | Y | Y |
 | [etcdstore](https://github.com/alexedwards/scs/tree/master/etcdstore)               | [Etcd](https://etcd.io/)                                                        | N | N | Y |
 | [firestore](https://github.com/alexedwards/scs/tree/master/firestore)               | [Google Cloud Firestore](https://cloud.google.com/firestore)                    | N | ? | Y |
-| [gormstore](https://github.com/alexedwards/scs/tree/master/gormstore)               | [GORM](https://gorm.io/index.html) ORM for PostgreSQL/MySQL/SQLite/MSSQL/TiDB   | N | N | Y |
+| [gormstore](https://github.com/alexedwards/scs/tree/master/gormstore)               | [GORM](https://gorm.io/index.html) (ORM for PostgreSQL/MySQL/SQLite/MSSQL/TiDB)   | N | N | Y |
 | [leveldbstore](https://github.com/alexedwards/scs/tree/master/leveldbstore)         | [LevelDB](https://github.com/syndtr/goleveldb)                                  | Y | N | N |
 | [memstore](https://github.com/alexedwards/scs/tree/master/memstore)                 | In-memory (default)                                                             | Y | Y | N |
 | [mongodbstore](https://github.com/alexedwards/scs/tree/master/mongodbstore)         | [MongoDB](https://www.mongodb.com/)                                             | N | N | Y |
@@ -168,12 +168,17 @@ The session stores currently included are shown in the table below. Please click
 | [mysqlstore](https://github.com/alexedwards/scs/tree/master/mysqlstore)             | [MySQL](https://www.mysql.com/)                                                 | N | N | Y |
 | [pgxstore](https://github.com/alexedwards/scs/tree/master/pgxstore)                 | [PostgreSQL](https://www.postgresql.org/) (using the [pgx](https://github.com/jackc/pgx) driver) | N | N | Y |
 | [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)       | [PostgreSQL](https://www.postgresql.org/) (using the [pq](https://github.com/lib/pq) driver)     | N | N | Y |
-| [goredisstore](https://github.com/alexedwards/scs/tree/master/goredisstore)         | [Redis](https://redis.io/) (using [go-redis](https://github.com/redis/go-redis))                 | N | Y | Y |
-| [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)             | [Redis](https://redis.io/) (using [redigo](https://github.com/gomodule/redigo))                  | N | Y | Y |
+| [goredisstore](https://github.com/alexedwards/scs/tree/master/goredisstore)         | [Redis](https://redis.io/) (using the [go-redis](https://github.com/redis/go-redis) driver)                 | N | Y | Y |
+| [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)             | [Redis](https://redis.io/) (using the [redigo](https://github.com/gomodule/redigo) driver)                  | N | Y | Y |
 | [sqlite3store](https://github.com/alexedwards/scs/tree/master/sqlite3store)         | [SQLite3](https://sqlite.org/) (using the [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) CGO-based driver) | Y | N | Y |
-| [rueidisstore](https://github.com/fnoopv/rueidisstore)         | [Redis](https://redis.io/) (using the [rueidis](https://github.com/redis/rueidis)) | N | N | Y |
 
-Custom session stores are also supported. Please [see here](#using-custom-session-stores) for more information.
+The following session stores supported by third-parties are also available:
+
+| Package                                                                             | Backend                                                                         | Embedded | In-Memory | Multi-Process |
+| :---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------|----------|-----------|---------------| 
+| [rueidisstore](https://github.com/fnoopv/rueidisstore)         | [Redis](https://redis.io/) (using the [rueidis](https://github.com/redis/rueidis) driver) | N | N | Y |
+
+Custom session stores are also supported. Please see below for more information.
 
 ### Using Custom Session Stores
 
