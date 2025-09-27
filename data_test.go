@@ -55,7 +55,7 @@ func TestSessionManager_Load(T *testing.T) {
 			t.Error("returned context is unexpectedly nil")
 		}
 
-		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		sd, ok := newCtx.Value(s.ContextKey).(*sessionData)
 		if !ok {
 			t.Error("sessionData not present in returned context")
 		}
@@ -75,7 +75,7 @@ func TestSessionManager_Load(T *testing.T) {
 		s := New()
 
 		obligatorySessionData := &sessionData{}
-		ctx := context.WithValue(context.Background(), s.contextKey, obligatorySessionData)
+		ctx := context.WithValue(context.Background(), s.ContextKey, obligatorySessionData)
 		expected := "example"
 
 		newCtx, err := s.Load(ctx, expected)
@@ -113,7 +113,7 @@ func TestSessionManager_Load(T *testing.T) {
 			t.Error("returned context is unexpectedly nil")
 		}
 
-		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		sd, ok := newCtx.Value(s.ContextKey).(*sessionData)
 		if !ok {
 			t.Error("sessionData not present in returned context")
 		}
@@ -163,7 +163,7 @@ func TestSessionManager_Load(T *testing.T) {
 			t.Error("returned context is unexpectedly nil")
 		}
 
-		sd, ok := newCtx.Value(s.contextKey).(*sessionData)
+		sd, ok := newCtx.Value(s.ContextKey).(*sessionData)
 		if !ok {
 			t.Error("sessionData not present in returned context")
 		}
@@ -207,7 +207,7 @@ func TestSessionManager_Load(T *testing.T) {
 		expectedToken := "example"
 		expectedExpiry := time.Now().Add(time.Hour)
 
-		initialCtx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+		initialCtx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
@@ -231,7 +231,7 @@ func TestSessionManager_Load(T *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error returned: %v", err)
 		}
-		retrievedSessionData, ok := retrievedCtx.Value(s.contextKey).(*sessionData)
+		retrievedSessionData, ok := retrievedCtx.Value(s.ContextKey).(*sessionData)
 		if !ok {
 			t.Errorf("unexpected data in retrieved context")
 		} else if retrievedSessionData.token != expectedToken {
@@ -254,7 +254,7 @@ func TestSessionManager_Commit(T *testing.T) {
 		expectedToken := "example"
 		expectedExpiry := time.Now().Add(time.Hour)
 
-		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
@@ -282,7 +282,7 @@ func TestSessionManager_Commit(T *testing.T) {
 		expectedToken := "XO6_D4NBpGP3D_BtekxTEO6o2ZvOzYnArauSQbgg"
 		expectedExpiry := time.Now().Add(time.Hour)
 
-		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
@@ -310,7 +310,7 @@ func TestSessionManager_Commit(T *testing.T) {
 		expectedToken := "example"
 		expectedExpiry := time.Now().Add(time.Hour * -100)
 
-		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: time.Now().Add(time.Hour * 24),
 			token:    expectedToken,
 			values: map[string]interface{}{
@@ -351,7 +351,7 @@ func TestSessionManager_Commit(T *testing.T) {
 			t.Errorf("unexpected encode error: %v", err)
 		}
 
-		ctx := context.WithValue(context.Background(), s.contextKey, sd)
+		ctx := context.WithValue(context.Background(), s.ContextKey, sd)
 
 		store.ExpectCommit(sd.token, expectedBytes, sd.deadline, expectedErr)
 		s.Store = store
@@ -373,7 +373,7 @@ func TestSessionManager_Commit(T *testing.T) {
 		expectedToken := "example"
 		expectedExpiry := time.Now().Add(time.Hour)
 
-		ctx := context.WithValue(context.Background(), s.contextKey, &sessionData{
+		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{

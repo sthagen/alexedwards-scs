@@ -33,6 +33,7 @@ func NewWithCleanupInterval(cleanupInterval time.Duration) *MemStore {
 	}
 
 	if cleanupInterval > 0 {
+		m.stopCleanup = make(chan bool)
 		go m.startCleanup(cleanupInterval)
 	}
 
@@ -100,7 +101,6 @@ func (m *MemStore) All() (map[string][]byte, error) {
 }
 
 func (m *MemStore) startCleanup(interval time.Duration) {
-	m.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(interval)
 	for {
 		select {
