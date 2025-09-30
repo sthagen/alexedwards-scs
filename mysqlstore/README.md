@@ -8,7 +8,7 @@ You should have a working MySQL database containing a `sessions` table with the 
 
 ```sql
 CREATE TABLE sessions (
-	token CHAR(43) PRIMARY KEY,
+	token CHAR(43) COLLATE utf8mb4_bin PRIMARY KEY,
 	data BLOB NOT NULL,
 	expiry TIMESTAMP(6) NOT NULL
 );
