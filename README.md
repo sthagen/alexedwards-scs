@@ -167,7 +167,7 @@ The session stores currently included are shown in the table below. Please click
 | [mssqlstore](https://github.com/alexedwards/scs/tree/master/mssqlstore)             | [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server)              | N | N | Y | 
 | [mysqlstore](https://github.com/alexedwards/scs/tree/master/mysqlstore)             | [MySQL](https://www.mysql.com/)                                                 | N | N | Y |
 | [pgxstore](https://github.com/alexedwards/scs/tree/master/pgxstore)                 | [PostgreSQL](https://www.postgresql.org/) (using the [pgx](https://github.com/jackc/pgx) driver) | N | N | Y |
-| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)       | [PostgreSQL](https://www.postgresql.org/) (using the [pq](https://github.com/lib/pq) driver)     | N | N | Y |
+| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)       | [PostgreSQL](https://www.postgresql.org/) (using the [pq](https://github.com/lib/pq) or [pgx/v5/stdlib](https://pkg.go.dev/github.com/jackc/pgx/v5/stdlib) drivers)     | N | N | Y |
 | [goredisstore](https://github.com/alexedwards/scs/tree/master/goredisstore)         | [Redis](https://redis.io/) (using the [go-redis](https://github.com/redis/go-redis) driver)                 | N | Y | Y |
 | [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)             | [Redis](https://redis.io/) (using the [redigo](https://github.com/gomodule/redigo) driver)                  | N | Y | Y |
 | [sqlite3store](https://github.com/alexedwards/scs/tree/master/sqlite3store)         | [SQLite3](https://sqlite.org/) (using the [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) CGO-based driver) | Y | N | Y |
