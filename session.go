@@ -162,12 +162,12 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, sr)
 
 		if !sw.written {
-			s.commitAndWriteSessionCookie(w, sr)
+			s.commitAndAddSessionCookie(w, sr)
 		}
 	})
 }
 
-func (s *SessionManager) commitAndWriteSessionCookie(w http.ResponseWriter, r *http.Request) {
+func (s *SessionManager) commitAndAddSessionCookie(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	switch s.Status(ctx) {
@@ -178,13 +178,19 @@ func (s *SessionManager) commitAndWriteSessionCookie(w http.ResponseWriter, r *h
 			return
 		}
 
-		s.WriteSessionCookie(ctx, w, token, expiry)
+		s.AddSessionCookie(ctx, w, token, expiry)
 	case Destroyed:
-		s.WriteSessionCookie(ctx, w, "", time.Time{})
+		s.AddSessionCookie(ctx, w, "", time.Time{})
 	}
 }
 
-// WriteSessionCookie writes a cookie to the HTTP response with the provided
+// Deprecated: WriteSessionCookie is a backwards-compatible alias for
+// AddSessionCookie. Use the AddSessionCookie method instead.
+func (s *SessionManager) WriteSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
+	s.AddSessionCookie(ctx, w, token, expiry)
+}
+
+// AddSessionCookie adds a cookie to the HTTP response headers with the provided
 // token as the cookie value and expiry as the cookie expiry time. The expiry
 // time will be included in the cookie only if the session is set to persist
 // or has had RememberMe(true) called on it. If expiry is an empty time.Time
@@ -194,7 +200,7 @@ func (s *SessionManager) commitAndWriteSessionCookie(w http.ResponseWriter, r *h
 //
 // Most applications will use the LoadAndSave() middleware and will not need to
 // use this method.
-func (s *SessionManager) WriteSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
+func (s *SessionManager) AddSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
 	cookie := &http.Cookie{
 		Value:       token,
 		Name:        s.Cookie.Name,
@@ -232,7 +238,7 @@ type sessionResponseWriter struct {
 
 func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
 	if !sw.written {
-		sw.sessionManager.commitAndWriteSessionCookie(sw.ResponseWriter, sw.request)
+		sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		sw.written = true
 	}
 
@@ -241,7 +247,7 @@ func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
 
 func (sw *sessionResponseWriter) WriteHeader(code int) {
 	if !sw.written {
-		sw.sessionManager.commitAndWriteSessionCookie(sw.ResponseWriter, sw.request)
+		sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		sw.written = true
 	}
 
