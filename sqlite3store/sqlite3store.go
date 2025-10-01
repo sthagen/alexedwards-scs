@@ -50,20 +50,22 @@ func NewWithConfig(db *sql.DB, config Config) *SQLite3Store {
 		config.TableName = "sessions"
 	}
 
-	p := &SQLite3Store{db: db, tableName: config.TableName}
+	s := &SQLite3Store{db: db, tableName: config.TableName}
+
 	if config.CleanUpInterval > 0 {
-		p.stopCleanup = make(chan bool)
-		go p.startCleanup(config.CleanUpInterval)
+		s.stopCleanup = make(chan bool)
+		go s.startCleanup(config.CleanUpInterval)
 	}
-	return p
+
+	return s
 }
 
 // Find returns the data for a given session token from the SQLite3Store instance.
 // If the session token is not found or is expired, the returned exists flag will
 // be set to false.
-func (p *SQLite3Store) Find(token string) (b []byte, exists bool, err error) {
-	stmt := fmt.Sprintf("SELECT data FROM %s WHERE token = $1 AND julianday('now') < expiry", p.tableName)
-	row := p.db.QueryRow(stmt, token)
+func (s *SQLite3Store) Find(token string) (b []byte, exists bool, err error) {
+	stmt := fmt.Sprintf("SELECT data FROM %s WHERE token = $1 AND julianday('now') < expiry", s.tableName)
+	row := s.db.QueryRow(stmt, token)
 	err = row.Scan(&b)
 	if err == sql.ErrNoRows {
 		return nil, false, nil
@@ -76,25 +78,25 @@ func (p *SQLite3Store) Find(token string) (b []byte, exists bool, err error) {
 // Commit adds a session token and data to the SQLite3Store instance with the
 // given expiry time. If the session token already exists, then the data and expiry
 // time are updated.
-func (p *SQLite3Store) Commit(token string, b []byte, expiry time.Time) error {
-	stmt := fmt.Sprintf("REPLACE INTO %s (token, data, expiry) VALUES ($1, $2, julianday($3))", p.tableName)
-	_, err := p.db.Exec(stmt, token, b, expiry.UTC().Format("2006-01-02T15:04:05.999"))
+func (s *SQLite3Store) Commit(token string, b []byte, expiry time.Time) error {
+	stmt := fmt.Sprintf("REPLACE INTO %s (token, data, expiry) VALUES ($1, $2, julianday($3))", s.tableName)
+	_, err := s.db.Exec(stmt, token, b, expiry.UTC().Format("2006-01-02T15:04:05.999"))
 	return err
 }
 
 // Delete removes a session token and corresponding data from the SQLite3Store
 // instance.
-func (p *SQLite3Store) Delete(token string) error {
-	stmt := fmt.Sprintf("DELETE FROM %s WHERE token = $1", p.tableName)
-	_, err := p.db.Exec(stmt, token)
+func (s *SQLite3Store) Delete(token string) error {
+	stmt := fmt.Sprintf("DELETE FROM %s WHERE token = $1", s.tableName)
+	_, err := s.db.Exec(stmt, token)
 	return err
 }
 
 // All returns a map containing the token and data for all active (i.e.
 // not expired) sessions in the SQLite3Store instance.
-func (p *SQLite3Store) All() (map[string][]byte, error) {
-	stmt := fmt.Sprintf("SELECT token, data FROM %s WHERE julianday('now') < expiry", p.tableName)
-	rows, err := p.db.Query(stmt)
+func (s *SQLite3Store) All() (map[string][]byte, error) {
+	stmt := fmt.Sprintf("SELECT token, data FROM %s WHERE julianday('now') < expiry", s.tableName)
+	rows, err := s.db.Query(stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -124,16 +126,16 @@ func (p *SQLite3Store) All() (map[string][]byte, error) {
 	return sessions, nil
 }
 
-func (p *SQLite3Store) startCleanup(interval time.Duration) {
+func (s *SQLite3Store) startCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	for {
 		select {
 		case <-ticker.C:
-			err := p.deleteExpired()
+			err := s.deleteExpired()
 			if err != nil {
 				log.Println(err)
 			}
-		case <-p.stopCleanup:
+		case <-s.stopCleanup:
 			ticker.Stop()
 			return
 		}
@@ -150,14 +152,14 @@ func (p *SQLite3Store) startCleanup(interval time.Duration) {
 // scenario, the cleanup goroutine (which will run forever) will prevent the
 // SQLite3Store object from being garbage collected even after the test function
 // has finished. You can prevent this by manually calling StopCleanup.
-func (p *SQLite3Store) StopCleanup() {
-	if p.stopCleanup != nil {
-		p.stopCleanup <- true
+func (s *SQLite3Store) StopCleanup() {
+	if s.stopCleanup != nil {
+		s.stopCleanup <- true
 	}
 }
 
-func (p *SQLite3Store) deleteExpired() error {
-	stmt := fmt.Sprintf("DELETE FROM %s WHERE expiry < julianday('now')", p.tableName)
-	_, err := p.db.Exec(stmt)
+func (s *SQLite3Store) deleteExpired() error {
+	stmt := fmt.Sprintf("DELETE FROM %s WHERE expiry < julianday('now')", s.tableName)
+	_, err := s.db.Exec(stmt)
 	return err
 }

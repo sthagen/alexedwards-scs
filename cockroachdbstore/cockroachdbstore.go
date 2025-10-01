@@ -46,24 +46,25 @@ func NewWithConfig(db *sql.DB, config Config) *CockroachDBStore {
 		config.TableName = "sessions"
 	}
 
-	store := &CockroachDBStore{
+	c := &CockroachDBStore{
 		db:        db,
 		tableName: config.TableName,
 	}
 
 	if config.CleanUpInterval > 0 {
-		go store.startCleanup(config.CleanUpInterval)
+		c.stopCleanup = make(chan bool)
+		go c.startCleanup(config.CleanUpInterval)
 	}
 
-	return store
+	return c
 }
 
 // Find returns the data for a given session token from the CockroachDBStore instance.
 // If the session token is not found or is expired, the returned exists flag will
 // be set to false.
-func (p *CockroachDBStore) Find(token string) (b []byte, exists bool, err error) {
-	query := fmt.Sprintf("SELECT data FROM %s WHERE token = $1 AND current_timestamp < expiry", p.tableName)
-	row := p.db.QueryRow(query, token)
+func (c *CockroachDBStore) Find(token string) (b []byte, exists bool, err error) {
+	query := fmt.Sprintf("SELECT data FROM %s WHERE token = $1 AND current_timestamp < expiry", c.tableName)
+	row := c.db.QueryRow(query, token)
 	err = row.Scan(&b)
 	if err == sql.ErrNoRows {
 		return nil, false, nil
@@ -76,25 +77,25 @@ func (p *CockroachDBStore) Find(token string) (b []byte, exists bool, err error)
 // Commit adds a session token and data to the CockroachDBStore instance with the
 // given expiry time. If the session token already exists, then the data and expiry
 // time are updated.
-func (p *CockroachDBStore) Commit(token string, b []byte, expiry time.Time) error {
-	query := fmt.Sprintf("INSERT INTO %s (token, data, expiry) VALUES ($1, $2, $3) ON CONFLICT (token) DO UPDATE SET data = EXCLUDED.data, expiry = EXCLUDED.expiry", p.tableName)
-	_, err := p.db.Exec(query, token, b, expiry)
+func (c *CockroachDBStore) Commit(token string, b []byte, expiry time.Time) error {
+	query := fmt.Sprintf("INSERT INTO %s (token, data, expiry) VALUES ($1, $2, $3) ON CONFLICT (token) DO UPDATE SET data = EXCLUDED.data, expiry = EXCLUDED.expiry", c.tableName)
+	_, err := c.db.Exec(query, token, b, expiry)
 	return err
 }
 
 // Delete removes a session token and corresponding data from the CockroachDBStore
 // instance.
-func (p *CockroachDBStore) Delete(token string) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE token = $1", p.tableName)
-	_, err := p.db.Exec(query, token)
+func (c *CockroachDBStore) Delete(token string) error {
+	query := fmt.Sprintf("DELETE FROM %s WHERE token = $1", c.tableName)
+	_, err := c.db.Exec(query, token)
 	return err
 }
 
 // All returns a map containing the token and data for all active (i.e.
 // not expired) sessions in the CockroachDBStore instance.
-func (p *CockroachDBStore) All() (map[string][]byte, error) {
-	query := fmt.Sprintf("SELECT token, data FROM %s WHERE current_timestamp < expiry", p.tableName)
-	rows, err := p.db.Query(query)
+func (c *CockroachDBStore) All() (map[string][]byte, error) {
+	query := fmt.Sprintf("SELECT token, data FROM %s WHERE current_timestamp < expiry", c.tableName)
+	rows, err := c.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -124,17 +125,16 @@ func (p *CockroachDBStore) All() (map[string][]byte, error) {
 	return sessions, nil
 }
 
-func (p *CockroachDBStore) startCleanup(interval time.Duration) {
-	p.stopCleanup = make(chan bool)
+func (c *CockroachDBStore) startCleanup(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	for {
 		select {
 		case <-ticker.C:
-			err := p.deleteExpired()
+			err := c.deleteExpired()
 			if err != nil {
 				log.Println(err)
 			}
-		case <-p.stopCleanup:
+		case <-c.stopCleanup:
 			ticker.Stop()
 			return
 		}
@@ -151,14 +151,14 @@ func (p *CockroachDBStore) startCleanup(interval time.Duration) {
 // scenario, the cleanup goroutine (which will run forever) will prevent the
 // CockroachDBStore object from being garbage collected even after the test function
 // has finished. You can prevent this by manually calling StopCleanup.
-func (p *CockroachDBStore) StopCleanup() {
-	if p.stopCleanup != nil {
-		p.stopCleanup <- true
+func (c *CockroachDBStore) StopCleanup() {
+	if c.stopCleanup != nil {
+		c.stopCleanup <- true
 	}
 }
 
-func (p *CockroachDBStore) deleteExpired() error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE expiry < current_timestamp", p.tableName)
-	_, err := p.db.Exec(query)
+func (c *CockroachDBStore) deleteExpired() error {
+	query := fmt.Sprintf("DELETE FROM %s WHERE expiry < current_timestamp", c.tableName)
+	_, err := c.db.Exec(query)
 	return err
 }

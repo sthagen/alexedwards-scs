@@ -28,15 +28,16 @@ func New(db *leveldb.DB) *LevelDBStore {
 // background cleanup goroutine. Setting it to 0 prevents the cleanup goroutine
 // from running (i.e. expired sessions will not be removed).
 func NewWithCleanupInterval(db *leveldb.DB, cleanupInterval time.Duration) *LevelDBStore {
-	bs := &LevelDBStore{
+	ls := &LevelDBStore{
 		db: db,
 	}
 
 	if cleanupInterval > 0 {
-		go bs.startCleanup(cleanupInterval)
+		ls.stopCleanup = make(chan bool)
+		go ls.startCleanup(cleanupInterval)
 	}
 
-	return bs
+	return ls
 }
 
 // Find returns the data for a given session token from the LevelDBStore instance.
@@ -102,7 +103,6 @@ func (ls *LevelDBStore) All() (map[string][]byte, error) {
 }
 
 func (ls *LevelDBStore) startCleanup(cleanupInterval time.Duration) {
-	ls.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(cleanupInterval)
 	for {
 		select {

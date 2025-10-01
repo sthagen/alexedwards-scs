@@ -64,6 +64,7 @@ func NewWithConfig(db *mongo.Database, config Config) *MongoDBStore {
 	}
 
 	if config.CleanupInterval > 0 {
+		m.stopCleanup = make(chan bool)
 		go m.startCleanup(config.CleanupInterval)
 	}
 
@@ -164,7 +165,6 @@ func (m *MongoDBStore) All() (map[string][]byte, error) {
 }
 
 func (m *MongoDBStore) startCleanup(cleanupInterval time.Duration) {
-	m.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(cleanupInterval)
 	for {
 		select {

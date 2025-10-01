@@ -52,6 +52,7 @@ func NewWithConfig(db *sql.DB, config Config) *MSSQLStore {
 
 	m := &MSSQLStore{db: db, tableName: config.TableName}
 	if config.CleanUpInterval > 0 {
+		m.stopCleanup = make(chan bool)
 		go m.startCleanup(config.CleanUpInterval)
 	}
 
@@ -127,7 +128,6 @@ func (m *MSSQLStore) All() (map[string][]byte, error) {
 }
 
 func (m *MSSQLStore) startCleanup(interval time.Duration) {
-	m.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(interval)
 	for {
 		select {

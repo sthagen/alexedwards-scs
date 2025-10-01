@@ -60,6 +60,7 @@ func NewWithConfig(db *sql.DB, config Config) *MySQLStore {
 	}
 
 	if config.CleanUpInterval > 0 {
+		m.stopCleanup = make(chan bool)
 		go m.startCleanup(config.CleanUpInterval)
 	}
 
@@ -148,7 +149,6 @@ func (m *MySQLStore) All() (map[string][]byte, error) {
 }
 
 func (m *MySQLStore) startCleanup(interval time.Duration) {
-	m.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(interval)
 	for {
 		select {

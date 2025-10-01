@@ -46,16 +46,17 @@ func NewWithConfig(db *sql.DB, config Config) *PostgresStore {
 		config.TableName = "sessions"
 	}
 
-	store := &PostgresStore{
+	p := &PostgresStore{
 		db:        db,
 		tableName: config.TableName,
 	}
 
 	if config.CleanUpInterval > 0 {
-		go store.startCleanup(config.CleanUpInterval)
+		p.stopCleanup = make(chan bool)
+		go p.startCleanup(config.CleanUpInterval)
 	}
 
-	return store
+	return p
 }
 
 // Find returns the data for a given session token from the PostgresStore instance.
@@ -133,7 +134,6 @@ func (p *PostgresStore) All() (map[string][]byte, error) {
 }
 
 func (p *PostgresStore) startCleanup(interval time.Duration) {
-	p.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(interval)
 	for {
 		select {

@@ -37,6 +37,7 @@ func NewWithCleanupInterval(db *bun.DB, cleanupInterval time.Duration) (*BunStor
 	b := &BunStore{db: db}
 
 	if cleanupInterval > 0 {
+		b.stopCleanup = make(chan bool)
 		go b.startCleanup(cleanupInterval)
 	}
 
@@ -123,7 +124,6 @@ func (b *BunStore) AllCtx(ctx context.Context) (map[string][]byte, error) {
 }
 
 func (b *BunStore) startCleanup(interval time.Duration) {
-	b.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(interval)
 	for {
 		select {
