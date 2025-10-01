@@ -603,6 +603,20 @@ func (s *SessionManager) Token(ctx context.Context) string {
 	return sd.token
 }
 
+// SetToken changes the token for the session to a known value. Please take care
+// when using this function to ensure that the token you are setting is an
+// unguessable value from a trusted source. Most applications will not need to
+// use this method.
+func (s *SessionManager) SetToken(ctx context.Context, token string) {
+	sd := s.getSessionDataFromContext(ctx)
+
+	sd.mu.Lock()
+	defer sd.mu.Unlock()
+
+	sd.token = token
+	sd.status = Modified
+}
+
 func (s *SessionManager) addSessionDataToContext(ctx context.Context, sd *sessionData) context.Context {
 	return context.WithValue(ctx, s.ContextKey, sd)
 }
