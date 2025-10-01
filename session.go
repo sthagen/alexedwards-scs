@@ -162,26 +162,31 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, sr)
 
 		if !sw.written {
-			s.commitAndAddSessionCookie(w, sr)
+			err := s.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+			if err != nil {
+				s.ErrorFunc(sw.ResponseWriter, sw.request, err)
+				return
+			}
 		}
 	})
 }
 
-func (s *SessionManager) commitAndAddSessionCookie(w http.ResponseWriter, r *http.Request) {
+func (s *SessionManager) commitAndAddSessionCookie(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	switch s.Status(ctx) {
 	case Modified:
 		token, expiry, err := s.Commit(ctx)
 		if err != nil {
-			s.ErrorFunc(w, r, err)
-			return
+			return err
 		}
 
 		s.AddSessionCookie(ctx, w, token, expiry)
 	case Destroyed:
 		s.AddSessionCookie(ctx, w, "", time.Time{})
 	}
+
+	return nil
 }
 
 // Deprecated: WriteSessionCookie is a backwards-compatible alias for
@@ -238,8 +243,13 @@ type sessionResponseWriter struct {
 
 func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
 	if !sw.written {
-		sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		sw.written = true
+
+		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+		if err != nil {
+			sw.sessionManager.ErrorFunc(sw.ResponseWriter, sw.request, err)
+			return 0, nil
+		}
 	}
 
 	return sw.ResponseWriter.Write(b)
@@ -247,8 +257,13 @@ func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
 
 func (sw *sessionResponseWriter) WriteHeader(code int) {
 	if !sw.written {
-		sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		sw.written = true
+
+		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+		if err != nil {
+			sw.sessionManager.ErrorFunc(sw.ResponseWriter, sw.request, err)
+			return
+		}
 	}
 
 	sw.ResponseWriter.WriteHeader(code)
