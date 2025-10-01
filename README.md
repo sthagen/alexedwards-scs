@@ -11,6 +11,10 @@
 - Easy to extend and customize. Communicate session tokens to/from clients in HTTP headers or request/response bodies.
 - Efficient design. Smaller, faster and uses less memory than [gorilla/sessions](https://github.com/gorilla/sessions).
 
+## Project status
+
+This project has reached a **stable** status. It is actively maintained with ongoing bug fixes and essential updates, and significant alterations to the API or behavior are not expected. Please see the [contributing guidelines](#contributing) before submitting any PRs.
+
 ## Instructions
 
 - [SCS: HTTP Session Management for Go](#scs-http-session-management-for-go)
@@ -311,10 +315,10 @@ For a complete working example, please see [this comment](https://github.com/ale
 
 Note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Flusher` interface directly. This effectively means that flushing/streaming is only supported by SCS if you are using Go >= 1.20.
 
-### Compatibility
+## Compatibility
 
 You may have some problems using this package with Go frameworks that do not propagate the request context from standard-library compatible middleware, like [Echo](https://github.com/alexedwards/scs/issues/57) and [Fiber](https://github.com/alexedwards/scs/issues/106). If you are using Echo, you may wish to evaluate using the [echo-scs-session](https://github.com/canidam/echo-scs-session) package for session management.
 
-### Contributing
+## Contributing
 
-Bug fixes and documentation improvements are very welcome! For feature additions or behavioral changes, please open an issue to discuss the change before submitting a PR. Additional store implementations will not merged to this repository (unless there is very significant demand) --- but please feel free to host the store implementation yourself and open a PR to link to it from this README.
+Bug fixes and documentation improvements are very welcome! This package is stable, so for any feature additions or behavioral changes please open an issue to make a proposal before submitting a PR. Additional store implementations will not merged to this repository (unless there is very significant demand) --- but please feel free to host the store implementation yourself and open a PR to link to it from this README.
