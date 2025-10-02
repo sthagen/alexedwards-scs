@@ -384,3 +384,38 @@ func TestSetToken(t *testing.T) {
 		t.Errorf("want %q; got %q", "bar", body)
 	}
 }
+
+func TestMultipleWrites(t *testing.T) {
+	t.Parallel()
+
+	sessionManager := New()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/put", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionManager.Put(r.Context(), "foo", "bar")
+	}))
+	mux.HandleFunc("/get", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(""))
+		s := sessionManager.PopString(r.Context(), "foo")
+		_, _, err := sessionManager.Commit(r.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(s))
+	}))
+
+	ts := newTestServer(t, sessionManager.LoadAndSave(mux))
+	defer ts.Close()
+
+	_, _ = ts.execute(t, "/put")
+
+	_, body := ts.execute(t, "/get")
+	if body != "bar" {
+		t.Errorf("want %q; got %q", "bar", body)
+	}
+
+	_, body = ts.execute(t, "/get")
+	if body != "" {
+		t.Errorf("want %q; got %q", "", body)
+	}
+}

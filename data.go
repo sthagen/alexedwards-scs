@@ -27,6 +27,10 @@ const (
 	// Destroyed indicates that the session data has been destroyed in the
 	// current request cycle.
 	Destroyed
+
+	// Committed indicates that the session data has been committed to the store
+	// and no modifications have been made to it since.
+	Committed
 )
 
 type sessionData struct {
@@ -139,6 +143,8 @@ func (s *SessionManager) Commit(ctx context.Context) (string, time.Time, error) 
 	if err := s.doStoreCommit(ctx, sd.token, b, sd.expiry); err != nil {
 		return "", time.Time{}, err
 	}
+
+	sd.status = Committed
 
 	return sd.token, sd.expiry, nil
 }

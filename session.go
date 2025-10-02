@@ -2,12 +2,15 @@ package scs
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/alexedwards/scs/v2/memstore"
 )
+
+var ErrUncommittedModification = errors.New("the session data contains uncommitted modifications, probably because you are modifying the session data after the response headers have already been written; if you need to modify the session data after the response headers are written, please call the Commit method after making the modification to persist the changes")
 
 // Deprecated: Session is a backwards-compatible alias for SessionManager.
 type Session = SessionManager
@@ -161,12 +164,16 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 
 		next.ServeHTTP(sw, sr)
 
-		if !sw.written {
-			err := s.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+		if !sw.responseWritten {
+			err := s.commitAndAddSessionCookie(w, sr)
 			if err != nil {
-				s.ErrorFunc(sw.ResponseWriter, sw.request, err)
+				s.ErrorFunc(w, sr, err)
 				return
 			}
+		}
+
+		if s.Status(ctx) == Modified {
+			panic(ErrUncommittedModification)
 		}
 	})
 }
@@ -236,14 +243,14 @@ func defaultErrorFunc(w http.ResponseWriter, r *http.Request, err error) {
 
 type sessionResponseWriter struct {
 	http.ResponseWriter
-	request        *http.Request
-	sessionManager *SessionManager
-	written        bool
+	request         *http.Request
+	sessionManager  *SessionManager
+	responseWritten bool
 }
 
 func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
-	if !sw.written {
-		sw.written = true
+	if !sw.responseWritten {
+		sw.responseWritten = true
 
 		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		if err != nil {
@@ -256,8 +263,8 @@ func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (sw *sessionResponseWriter) WriteHeader(code int) {
-	if !sw.written {
-		sw.written = true
+	if !sw.responseWritten {
+		sw.responseWritten = true
 
 		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
 		if err != nil {
