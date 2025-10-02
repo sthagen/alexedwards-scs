@@ -152,6 +152,9 @@ func (s *SessionManager) Commit(ctx context.Context) (string, time.Time, error) 
 // Destroy deletes the session data from the session store and sets the session
 // status to Destroyed. Any further operations in the same request cycle will
 // result in a new session being created.
+//
+// Destroy should only be called once per request cycle, and must be called
+// before the response headers are written.
 func (s *SessionManager) Destroy(ctx context.Context) error {
 	sd := s.getSessionDataFromContext(ctx)
 
@@ -305,6 +308,9 @@ func (s *SessionManager) Keys(ctx context.Context) []string {
 // RenewToken before making any changes to privilege levels (e.g. login and
 // logout operations). See https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/Session_Management_Cheat_Sheet.md#renew-the-session-id-after-any-privilege-level-change
 // for additional information.
+//
+// RenewToken should only be called once per request cycle, and must be called
+// before the response headers are written.
 func (s *SessionManager) RenewToken(ctx context.Context) error {
 	sd := s.getSessionDataFromContext(ctx)
 

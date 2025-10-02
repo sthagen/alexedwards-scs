@@ -30,7 +30,7 @@ This project has reached a **stable** status. It is actively maintained with ong
       - [Using Custom Session Stores (with context.Context)](#using-custom-session-stores-with-contextcontext)
     - [Multiple Sessions per Request](#multiple-sessions-per-request)
     - [Enumerate All Sessions](#enumerate-all-sessions)
-    - [Flushing and Streaming Responses](#flushing-and-streaming-responses)
+    - [Multiple Writes, Flushing and Streaming Responses](#multiple-writes-flushing-and-streaming-responses)
 	- [Hijacking Responses](#hijacking-responses)
     - [Compatibility](#compatibility)
     - [Contributing](#contributing)
@@ -287,9 +287,33 @@ if err != nil {
 }
 ```
 
-### Flushing and Streaming Responses
+### Multiple Writes, Flushing and Streaming Responses
 
-Flushing responses is supported via the `http.NewResponseController` type (available in Go >= 1.20).
+**Important:** If you are using the `LoadAndSave` middleware, session data will be committed to the store when the response is written. If you make multiple writes, the session data will only be automatically committed when the first response write is made. If you modify the session data after the first write, the changes will not be automatically committed, and you will need to manually call the `Commit` method, like so:
+
+```go
+func multiWriteHandler(w http.ResponseWriter, r *http.Request) {
+	sessionManager.Put(r.Context(), "message1", "Hello")
+
+	w.Write([]byte("write #1"))
+
+	// Because this modification happens after the first response write, it will
+	// not automatically be committed to the store.
+	sessionManager.Put(r.Context(), "message2", "world")
+	
+	// And you will need to call Commit manually.
+	_, _, err := sessionManager.Commit(r.Context())
+	if err != nil {
+		// ...
+	}
+
+	w.Write([]byte("write #2"))
+}
+```
+
+If you modify the session data and forget to call `Commit`, the `LoadAndSave` middleware will panic with an `ErrUncommittedModification` error.
+
+Flushing responses is supported via the `http.NewResponseController` type (available in Go >= 1.20). 
 
 ```go
 func flushingHandler(w http.ResponseWriter, r *http.Request) {
@@ -312,6 +336,8 @@ func flushingHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 For a complete working example, please see [this comment](https://github.com/alexedwards/scs/issues/141#issuecomment-1774050802).
+
+Please note that the same warning applies here: modification of session data after the first response write will not automatically be committed to the store.
 
 Note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Flusher` interface directly. This effectively means that flushing/streaming is only supported by SCS if you are using Go >= 1.20.
 
