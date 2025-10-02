@@ -36,6 +36,7 @@ func NewWithOptions(client *api.Client, cleanupInterval time.Duration, prefix st
 	}
 
 	if cleanupInterval > 0 {
+		c.stopCleanup = make(chan bool)
 		go c.startCleanup(cleanupInterval)
 	}
 
@@ -102,7 +103,6 @@ func (c *ConsulStore) All() (map[string][]byte, error) {
 }
 
 func (c *ConsulStore) startCleanup(cleanupInterval time.Duration) {
-	c.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(cleanupInterval)
 	for {
 		select {

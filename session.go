@@ -2,12 +2,15 @@ package scs
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/alexedwards/scs/v2/memstore"
 )
+
+var ErrUncommittedModification = errors.New("the session data contains uncommitted modifications, probably because you are modifying the session data after the response headers have already been written; if you need to modify the session data after the response headers are written, please call the Commit method after making the modification to persist the changes")
 
 // Deprecated: Session is a backwards-compatible alias for SessionManager.
 type Session = SessionManager
@@ -161,30 +164,45 @@ func (s *SessionManager) LoadAndSave(next http.Handler) http.Handler {
 
 		next.ServeHTTP(sw, sr)
 
-		if !sw.written {
-			s.commitAndWriteSessionCookie(w, sr)
+		if !sw.responseWritten {
+			err := s.commitAndAddSessionCookie(w, sr)
+			if err != nil {
+				s.ErrorFunc(w, sr, err)
+				return
+			}
+		}
+
+		if s.Status(ctx) == Modified {
+			panic(ErrUncommittedModification)
 		}
 	})
 }
 
-func (s *SessionManager) commitAndWriteSessionCookie(w http.ResponseWriter, r *http.Request) {
+func (s *SessionManager) commitAndAddSessionCookie(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	switch s.Status(ctx) {
 	case Modified:
 		token, expiry, err := s.Commit(ctx)
 		if err != nil {
-			s.ErrorFunc(w, r, err)
-			return
+			return err
 		}
 
-		s.WriteSessionCookie(ctx, w, token, expiry)
+		s.AddSessionCookie(ctx, w, token, expiry)
 	case Destroyed:
-		s.WriteSessionCookie(ctx, w, "", time.Time{})
+		s.AddSessionCookie(ctx, w, "", time.Time{})
 	}
+
+	return nil
 }
 
-// WriteSessionCookie writes a cookie to the HTTP response with the provided
+// Deprecated: WriteSessionCookie is a backwards-compatible alias for
+// AddSessionCookie. Use the AddSessionCookie method instead.
+func (s *SessionManager) WriteSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
+	s.AddSessionCookie(ctx, w, token, expiry)
+}
+
+// AddSessionCookie adds a cookie to the HTTP response headers with the provided
 // token as the cookie value and expiry as the cookie expiry time. The expiry
 // time will be included in the cookie only if the session is set to persist
 // or has had RememberMe(true) called on it. If expiry is an empty time.Time
@@ -194,7 +212,7 @@ func (s *SessionManager) commitAndWriteSessionCookie(w http.ResponseWriter, r *h
 //
 // Most applications will use the LoadAndSave() middleware and will not need to
 // use this method.
-func (s *SessionManager) WriteSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
+func (s *SessionManager) AddSessionCookie(ctx context.Context, w http.ResponseWriter, token string, expiry time.Time) {
 	cookie := &http.Cookie{
 		Value:       token,
 		Name:        s.Cookie.Name,
@@ -225,24 +243,34 @@ func defaultErrorFunc(w http.ResponseWriter, r *http.Request, err error) {
 
 type sessionResponseWriter struct {
 	http.ResponseWriter
-	request        *http.Request
-	sessionManager *SessionManager
-	written        bool
+	request         *http.Request
+	sessionManager  *SessionManager
+	responseWritten bool
 }
 
 func (sw *sessionResponseWriter) Write(b []byte) (int, error) {
-	if !sw.written {
-		sw.sessionManager.commitAndWriteSessionCookie(sw.ResponseWriter, sw.request)
-		sw.written = true
+	if !sw.responseWritten {
+		sw.responseWritten = true
+
+		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+		if err != nil {
+			sw.sessionManager.ErrorFunc(sw.ResponseWriter, sw.request, err)
+			return 0, nil
+		}
 	}
 
 	return sw.ResponseWriter.Write(b)
 }
 
 func (sw *sessionResponseWriter) WriteHeader(code int) {
-	if !sw.written {
-		sw.sessionManager.commitAndWriteSessionCookie(sw.ResponseWriter, sw.request)
-		sw.written = true
+	if !sw.responseWritten {
+		sw.responseWritten = true
+
+		err := sw.sessionManager.commitAndAddSessionCookie(sw.ResponseWriter, sw.request)
+		if err != nil {
+			sw.sessionManager.ErrorFunc(sw.ResponseWriter, sw.request, err)
+			return
+		}
 	}
 
 	sw.ResponseWriter.WriteHeader(code)

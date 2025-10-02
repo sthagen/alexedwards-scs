@@ -2,6 +2,8 @@
 
 A PostgreSQL based session store for [SCS](https://github.com/alexedwards/scs) using the [pq](https://github.com/lib/pq) driver.
 
+Note: It's also possible to use the [jackc/pgx/v5/stdlib](https://pkg.go.dev/github.com/jackc/pgx/v5/stdlib) driver with this package in the same way, instead of the `pq` driver.
+
 ## Setup
 
 You should have a working PostgreSQL database containing a `sessions` table with the definition:

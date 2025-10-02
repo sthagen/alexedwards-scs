@@ -27,22 +27,45 @@ const (
 	// Destroyed indicates that the session data has been destroyed in the
 	// current request cycle.
 	Destroyed
+
+	// Committed indicates that the session data has been committed to the store
+	// and no modifications have been made to it since.
+	Committed
 )
 
 type sessionData struct {
 	deadline time.Time
+	expiry   time.Time
 	status   Status
 	token    string
 	values   map[string]interface{}
 	mu       sync.Mutex
 }
 
-func newSessionData(lifetime time.Duration) *sessionData {
-	return &sessionData{
-		deadline: time.Now().Add(lifetime).UTC(),
+func newSessionData(lifetime, idleTimeout time.Duration) *sessionData {
+	now := time.Now()
+	deadline := now.Add(lifetime).UTC()
+
+	sd := sessionData{
+		deadline: deadline,
+		expiry:   deadline,
 		status:   Unmodified,
 		values:   make(map[string]interface{}),
 	}
+
+	if idleTimeout > 0 {
+		idleExpiry := time.Now().Add(idleTimeout).UTC()
+		sd.expiry = minTime(sd.deadline, idleExpiry)
+	}
+
+	return &sd
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
 
 // Load retrieves the session data for the given token from the session store,
@@ -57,28 +80,37 @@ func (s *SessionManager) Load(ctx context.Context, token string) (context.Contex
 	}
 
 	if token == "" {
-		return s.addSessionDataToContext(ctx, newSessionData(s.Lifetime)), nil
+		return s.addSessionDataToContext(ctx, newSessionData(s.Lifetime, s.IdleTimeout)), nil
 	}
 
 	b, found, err := s.doStoreFind(ctx, token)
 	if err != nil {
 		return nil, err
 	} else if !found {
-		return s.addSessionDataToContext(ctx, newSessionData(s.Lifetime)), nil
+		return s.addSessionDataToContext(ctx, newSessionData(s.Lifetime, s.IdleTimeout)), nil
 	}
 
 	sd := &sessionData{
 		status: Unmodified,
 		token:  token,
 	}
-	if sd.deadline, sd.values, err = s.Codec.Decode(b); err != nil {
+
+	sd.deadline, sd.values, err = s.Codec.Decode(b)
+	if err != nil {
 		return nil, err
 	}
 
-	// Mark the session data as modified if an idle timeout is being used. This
-	// will force the session data to be re-committed to the session store with
-	// a new expiry time.
+	// By default, set the expiry time to the deadline.
+	sd.expiry = sd.deadline
+
+	// If an idle timeout is being used, set the expiry to whichever comes first
+	// between the session deadline and idleTimeout expiry. We also set the status
+	// to Modified, which will force the session data to be re-committed to the
+	// session store with the updated new expiry time.
 	if s.IdleTimeout > 0 {
+		idleExpiry := time.Now().Add(s.IdleTimeout).UTC()
+
+		sd.expiry = minTime(sd.deadline, idleExpiry)
 		sd.status = Modified
 	}
 
@@ -108,24 +140,21 @@ func (s *SessionManager) Commit(ctx context.Context) (string, time.Time, error) 
 		return "", time.Time{}, err
 	}
 
-	expiry := sd.deadline
-	if s.IdleTimeout > 0 {
-		ie := time.Now().Add(s.IdleTimeout).UTC()
-		if ie.Before(expiry) {
-			expiry = ie
-		}
-	}
-
-	if err := s.doStoreCommit(ctx, sd.token, b, expiry); err != nil {
+	if err := s.doStoreCommit(ctx, sd.token, b, sd.expiry); err != nil {
 		return "", time.Time{}, err
 	}
 
-	return sd.token, expiry, nil
+	sd.status = Committed
+
+	return sd.token, sd.expiry, nil
 }
 
 // Destroy deletes the session data from the session store and sets the session
 // status to Destroyed. Any further operations in the same request cycle will
 // result in a new session being created.
+//
+// Destroy should only be called once per request cycle, and must be called
+// before the response headers are written.
 func (s *SessionManager) Destroy(ctx context.Context) error {
 	sd := s.getSessionDataFromContext(ctx)
 
@@ -279,6 +308,9 @@ func (s *SessionManager) Keys(ctx context.Context) []string {
 // RenewToken before making any changes to privilege levels (e.g. login and
 // logout operations). See https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/Session_Management_Cheat_Sheet.md#renew-the-session-id-after-any-privilege-level-change
 // for additional information.
+//
+// RenewToken should only be called once per request cycle, and must be called
+// before the response headers are written.
 func (s *SessionManager) RenewToken(ctx context.Context) error {
 	sd := s.getSessionDataFromContext(ctx)
 
@@ -591,6 +623,17 @@ func (s *SessionManager) SetDeadline(ctx context.Context, expire time.Time) {
 	sd.status = Modified
 }
 
+// Expiry returns the expiry time for the session. If you are not using an idle
+// timeout, the value returned will be the same as calling the Deadline method.
+func (s *SessionManager) Expiry(ctx context.Context) time.Time {
+	sd := s.getSessionDataFromContext(ctx)
+
+	sd.mu.Lock()
+	defer sd.mu.Unlock()
+
+	return sd.expiry
+}
+
 // Token returns the session token. Please note that this will return the
 // empty string "" if it is called before the session has been committed to
 // the store.
@@ -601,6 +644,20 @@ func (s *SessionManager) Token(ctx context.Context) string {
 	defer sd.mu.Unlock()
 
 	return sd.token
+}
+
+// SetToken changes the token for the session to a known value. Please take care
+// when using this function to ensure that the token you are setting is an
+// unguessable value from a trusted source. Most applications will not need to
+// use this method.
+func (s *SessionManager) SetToken(ctx context.Context, token string) {
+	sd := s.getSessionDataFromContext(ctx)
+
+	sd.mu.Lock()
+	defer sd.mu.Unlock()
+
+	sd.token = token
+	sd.status = Modified
 }
 
 func (s *SessionManager) addSessionDataToContext(ctx context.Context, sd *sessionData) context.Context {

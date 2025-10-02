@@ -35,6 +35,7 @@ func NewWithCleanupInterval(db *bbolt.DB, cleanupInterval time.Duration) *BoltSt
 		db: db,
 	}
 	if cleanupInterval > 0 {
+		bs.stopCleanup = make(chan bool)
 		go bs.startCleanup(cleanupInterval)
 	}
 	return bs
@@ -116,7 +117,6 @@ func (bs *BoltStore) All() (map[string][]byte, error) {
 }
 
 func (bs *BoltStore) startCleanup(cleanupInterval time.Duration) {
-	bs.stopCleanup = make(chan bool)
 	ticker := time.NewTicker(cleanupInterval)
 	for {
 		select {

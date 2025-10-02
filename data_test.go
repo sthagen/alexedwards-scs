@@ -209,6 +209,7 @@ func TestSessionManager_Load(T *testing.T) {
 
 		initialCtx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
+			expiry:   expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
 				"blah": "blah",
@@ -256,6 +257,7 @@ func TestSessionManager_Commit(T *testing.T) {
 
 		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
+			expiry:   expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
 				"blah": "blah",
@@ -284,6 +286,7 @@ func TestSessionManager_Commit(T *testing.T) {
 
 		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
+			expiry:   expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
 				"blah": "blah",
@@ -337,9 +340,11 @@ func TestSessionManager_Commit(T *testing.T) {
 
 		store := &mockstore.MockStore{}
 		expectedErr := errors.New("arbitrary")
+		deadline := time.Now().Add(time.Hour)
 
 		sd := &sessionData{
-			deadline: time.Now().Add(time.Hour),
+			deadline: deadline,
+			expiry:   deadline,
 			token:    "example",
 			values: map[string]interface{}{
 				"blah": "blah",
@@ -375,6 +380,7 @@ func TestSessionManager_Commit(T *testing.T) {
 
 		ctx := context.WithValue(context.Background(), s.ContextKey, &sessionData{
 			deadline: expectedExpiry,
+			expiry:   expectedExpiry,
 			token:    expectedToken,
 			values: map[string]interface{}{
 				"blah": "blah",
@@ -399,7 +405,7 @@ func TestPut(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
 	s.Put(ctx, "foo", "bar")
@@ -417,7 +423,7 @@ func TestGet(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -435,7 +441,7 @@ func TestPop(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -462,7 +468,7 @@ func TestRemove(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -481,7 +487,7 @@ func TestClear(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	sd.values["baz"] = "boz"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -507,7 +513,7 @@ func TestExists(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -524,7 +530,7 @@ func TestKeys(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	sd.values["woo"] = "waa"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
@@ -539,7 +545,7 @@ func TestGetString(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -558,7 +564,7 @@ func TestGetBool(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = true
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -577,7 +583,7 @@ func TestGetInt(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = 123
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -596,7 +602,7 @@ func TestGetFloat(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = 123.456
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -615,7 +621,7 @@ func TestGetBytes(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = []byte("bar")
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -636,7 +642,7 @@ func TestGetTime(t *testing.T) {
 	now := time.Now()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = now
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -655,7 +661,7 @@ func TestPopString(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = "bar"
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -683,7 +689,7 @@ func TestPopBool(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = true
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -711,7 +717,7 @@ func TestPopInt(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = 123
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -739,7 +745,7 @@ func TestPopFloat(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = 123.456
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -767,7 +773,7 @@ func TestPopBytes(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = []byte("bar")
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -795,7 +801,7 @@ func TestPopTime(t *testing.T) {
 
 	now := time.Now()
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	sd.values["foo"] = now
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
@@ -824,7 +830,7 @@ func TestStatus(t *testing.T) {
 	t.Parallel()
 
 	s := New()
-	sd := newSessionData(time.Hour)
+	sd := newSessionData(time.Hour, 0)
 	ctx := s.addSessionDataToContext(context.Background(), sd)
 
 	status := s.Status(ctx)
@@ -845,5 +851,30 @@ func TestStatus(t *testing.T) {
 	status = s.Status(ctx)
 	if status != Destroyed {
 		t.Errorf("got %d: expected %d", status, Destroyed)
+	}
+}
+
+func TestDeadlineAndExpiry(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	sd := newSessionData(time.Hour, 0)
+	ctx := s.addSessionDataToContext(context.Background(), sd)
+
+	expiry := s.Expiry(ctx)
+	deadline := s.Deadline(ctx)
+
+	if !expiry.Equal(deadline) {
+		t.Errorf("got %v: expected %v", expiry, deadline)
+	}
+
+	sd = newSessionData(time.Hour, time.Minute)
+	ctx = s.addSessionDataToContext(context.Background(), sd)
+
+	expiry = s.Expiry(ctx)
+	deadline = s.Deadline(ctx)
+
+	if !expiry.Before(deadline) {
+		t.Errorf("got %v: expected before %v", expiry, deadline)
 	}
 }

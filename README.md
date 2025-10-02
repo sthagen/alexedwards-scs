@@ -2,7 +2,6 @@
 
 [![GoDoc](https://godoc.org/github.com/alexedwards/scs?status.png)](https://pkg.go.dev/github.com/alexedwards/scs/v2?tab=doc)
 [![Go report card](https://goreportcard.com/badge/github.com/alexedwards/scs)](https://goreportcard.com/report/github.com/alexedwards/scs)
-[![Test coverage](http://gocover.io/_badge/github.com/alexedwards/scs)](https://gocover.io/github.com/alexedwards/scs)
 
 ## Features
 
@@ -11,6 +10,10 @@
 - Supports multiple sessions per request, 'flash' messages, session token regeneration, idle and absolute session timeouts, and 'remember me' functionality.
 - Easy to extend and customize. Communicate session tokens to/from clients in HTTP headers or request/response bodies.
 - Efficient design. Smaller, faster and uses less memory than [gorilla/sessions](https://github.com/gorilla/sessions).
+
+## Project status
+
+This project has reached a **stable** status. It is actively maintained with ongoing bug fixes and essential updates, and significant alterations to the API or behavior are not expected. Please see the [contributing guidelines](#contributing) before submitting any PRs.
 
 ## Instructions
 
@@ -27,7 +30,8 @@
       - [Using Custom Session Stores (with context.Context)](#using-custom-session-stores-with-contextcontext)
     - [Multiple Sessions per Request](#multiple-sessions-per-request)
     - [Enumerate All Sessions](#enumerate-all-sessions)
-    - [Flushing and Streaming Responses](#flushing-and-streaming-responses)
+    - [Multiple Writes, Flushing and Streaming Responses](#multiple-writes-flushing-and-streaming-responses)
+	- [Hijacking Responses](#hijacking-responses)
     - [Compatibility](#compatibility)
     - [Contributing](#contributing)
 
@@ -167,7 +171,7 @@ The session stores currently included are shown in the table below. Please click
 | [mssqlstore](https://github.com/alexedwards/scs/tree/master/mssqlstore)             | [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server)              | N | N | Y | 
 | [mysqlstore](https://github.com/alexedwards/scs/tree/master/mysqlstore)             | [MySQL](https://www.mysql.com/)                                                 | N | N | Y |
 | [pgxstore](https://github.com/alexedwards/scs/tree/master/pgxstore)                 | [PostgreSQL](https://www.postgresql.org/) (using the [pgx](https://github.com/jackc/pgx) driver) | N | N | Y |
-| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)       | [PostgreSQL](https://www.postgresql.org/) (using the [pq](https://github.com/lib/pq) driver)     | N | N | Y |
+| [postgresstore](https://github.com/alexedwards/scs/tree/master/postgresstore)       | [PostgreSQL](https://www.postgresql.org/) (using the [pq](https://github.com/lib/pq) or [pgx/v5/stdlib](https://pkg.go.dev/github.com/jackc/pgx/v5/stdlib) drivers)     | N | N | Y |
 | [goredisstore](https://github.com/alexedwards/scs/tree/master/goredisstore)         | [Redis](https://redis.io/) (using the [go-redis](https://github.com/redis/go-redis) driver)                 | N | Y | Y |
 | [redisstore](https://github.com/alexedwards/scs/tree/master/redisstore)             | [Redis](https://redis.io/) (using the [redigo](https://github.com/gomodule/redigo) driver)                  | N | Y | Y |
 | [sqlite3store](https://github.com/alexedwards/scs/tree/master/sqlite3store)         | [SQLite3](https://sqlite.org/) (using the [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) CGO-based driver) | Y | N | Y |
@@ -264,7 +268,6 @@ It is possible for an application to support multiple sessions per request, with
 
 ### Enumerate All Sessions
 
-
 To iterate throught all sessions, SCS offers to all data stores an `All()` function where they can return their own sessions.
 
 Essentially, in your code, you pass the `Iterate()` method a closure with the signature `func(ctx context.Context) error` which contains the logic that you want to execute against each session. For example, if you want to revoke all sessions with contain a `userID` value equal to `4` you can do the following:
@@ -284,9 +287,33 @@ if err != nil {
 }
 ```
 
-### Flushing and Streaming Responses
+### Multiple Writes, Flushing and Streaming Responses
 
-Flushing responses is supported via the `http.NewResponseController` type (available in Go >= 1.20).
+**Important:** If you are using the `LoadAndSave` middleware, session data will be committed to the store when the response is written. If you make multiple writes, the session data will only be automatically committed when the first response write is made. If you modify the session data after the first write, the changes will not be automatically committed, and you will need to manually call the `Commit` method, like so:
+
+```go
+func multiWriteHandler(w http.ResponseWriter, r *http.Request) {
+	sessionManager.Put(r.Context(), "message1", "Hello")
+
+	w.Write([]byte("write #1"))
+
+	// Because this modification happens after the first response write, it will
+	// not automatically be committed to the store.
+	sessionManager.Put(r.Context(), "message2", "world")
+	
+	// And you will need to call Commit manually.
+	_, _, err := sessionManager.Commit(r.Context())
+	if err != nil {
+		// ...
+	}
+
+	w.Write([]byte("write #2"))
+}
+```
+
+If you modify the session data and forget to call `Commit`, the `LoadAndSave` middleware will panic with an `ErrUncommittedModification` error.
+
+Flushing responses is supported via the `http.NewResponseController` type (available in Go >= 1.20). 
 
 ```go
 func flushingHandler(w http.ResponseWriter, r *http.Request) {
@@ -310,12 +337,18 @@ func flushingHandler(w http.ResponseWriter, r *http.Request) {
 
 For a complete working example, please see [this comment](https://github.com/alexedwards/scs/issues/141#issuecomment-1774050802).
 
+Please note that the same warning applies here: modification of session data after the first response write will not automatically be committed to the store.
+
 Note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Flusher` interface directly. This effectively means that flushing/streaming is only supported by SCS if you are using Go >= 1.20.
 
-### Compatibility
+### Hijacking Responses
+
+Hijacking responses is supported via the `http.NewResponseController` type (available in Go >= 1.20). Please note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Hijacker` interface directly. This effectively means that hijacking is only supported by SCS if you are using Go >= 1.20.
+
+## Compatibility
 
 You may have some problems using this package with Go frameworks that do not propagate the request context from standard-library compatible middleware, like [Echo](https://github.com/alexedwards/scs/issues/57) and [Fiber](https://github.com/alexedwards/scs/issues/106). If you are using Echo, you may wish to evaluate using the [echo-scs-session](https://github.com/canidam/echo-scs-session) package for session management.
 
-### Contributing
+## Contributing
 
-Bug fixes and documentation improvements are very welcome! For feature additions or behavioral changes, please open an issue to discuss the change before submitting a PR. Additional store implementations will not merged to this repository (unless there is very significant demand) --- but please feel free to host the store implementation yourself and open a PR to link to it from this README.
+Bug fixes and documentation improvements are very welcome! This package is stable, so for any feature additions or behavioral changes please open an issue to make a proposal before submitting a PR. Additional store implementations will not merged to this repository (unless there is very significant demand) --- but please feel free to host the store implementation yourself and open a PR to link to it from this README.
