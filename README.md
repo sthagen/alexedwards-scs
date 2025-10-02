@@ -31,6 +31,7 @@ This project has reached a **stable** status. It is actively maintained with ong
     - [Multiple Sessions per Request](#multiple-sessions-per-request)
     - [Enumerate All Sessions](#enumerate-all-sessions)
     - [Flushing and Streaming Responses](#flushing-and-streaming-responses)
+	- [Hijacking Responses](#hijacking-responses)
     - [Compatibility](#compatibility)
     - [Contributing](#contributing)
 
@@ -267,7 +268,6 @@ It is possible for an application to support multiple sessions per request, with
 
 ### Enumerate All Sessions
 
-
 To iterate throught all sessions, SCS offers to all data stores an `All()` function where they can return their own sessions.
 
 Essentially, in your code, you pass the `Iterate()` method a closure with the signature `func(ctx context.Context) error` which contains the logic that you want to execute against each session. For example, if you want to revoke all sessions with contain a `userID` value equal to `4` you can do the following:
@@ -314,6 +314,10 @@ func flushingHandler(w http.ResponseWriter, r *http.Request) {
 For a complete working example, please see [this comment](https://github.com/alexedwards/scs/issues/141#issuecomment-1774050802).
 
 Note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Flusher` interface directly. This effectively means that flushing/streaming is only supported by SCS if you are using Go >= 1.20.
+
+### Hijacking Responses
+
+Hijacking responses is supported via the `http.NewResponseController` type (available in Go >= 1.20). Please note that the `http.ResponseWriter` passed on by the [`LoadAndSave()`](https://pkg.go.dev/github.com/alexedwards/scs/v2#SessionManager.LoadAndSave) middleware does not support the `http.Hijacker` interface directly. This effectively means that hijacking is only supported by SCS if you are using Go >= 1.20.
 
 ## Compatibility
 
